@@ -1,0 +1,532 @@
+/* 1. Prevent Layout Shift: Reserve sidebar space immediately */
+.dashboard-container {
+    display: flex;
+    height: 100vh;
+    background-color: #f8fafc; /* Matches your --bg-light */
+}
+
+.sidebar {
+    width: 260px;
+    min-width: 260px; /* Added to prevent shrinking */
+    max-width: 260px; /* Added to prevent expanding */
+    background-color: var(--sidebar-dark);
+    color: white;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box; /* Added to include padding in the 260px width */
+    flex-shrink: 0; /* Added to ensure flexbox doesn't squash it */
+}
+
+/* 2. Prevent Icon Flicker: Reserve 18px square for every icon */
+i[data-lucide] {
+    width: 18px !important;
+    height: 18px !important;
+    display: inline-block;
+    min-width: 18px;
+    min-height: 18px;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+:root {
+    --primary: #2563eb;
+    --bg-light: #f8fafc;
+    --sidebar-dark: #1e293b;
+    --text-main: #334155;
+}
+
+/* target all anchor (link) tags */
+a {
+    text-decoration: none; /* Removes the underline */
+    color: inherit;        /* Makes the link take the color of the text around it */
+    display: block;        /* Makes the entire area clickable, not just the text */
+}
+
+/* Optional: Ensure visited links don't turn purple */
+a:visited {
+    color: inherit;
+}
+
+body {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-light);
+    color: var(--text-main);
+}
+
+
+
+
+/* Ensure the main-content respects the sidebar's space */
+.main-content {
+    flex-grow: 1;
+    min-width: 0; /* Important for grid/flex child scaling */
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.status-badge.review {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+}
+
+.nav-links {
+    list-style: none; /* Removes bullet points */
+    padding: 0;
+    margin-top: 2rem;
+}
+
+.nav-links li {
+    margin-bottom: 0.5rem;
+}
+
+.nav-links li a {
+    display: flex; /* Aligns icon and text in a row */
+    align-items: center;
+    gap: 12px; /* Adds space between icon and text */
+    padding: 0.8rem 1rem;
+    color: #94a3b8;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.nav-links i {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2px; /* Controls the thickness of the icon lines */
+}
+
+/* Hover effect: Subtle background change */
+.nav-links li a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white; /* Brighten text on hover */
+}
+
+/* Active state: Highlight the page the user is currently on */
+.nav-links li.active a {
+    background-color: var(--primary); /* That blue we defined earlier */
+    color: white;
+    font-weight: 600;
+}
+
+.upload-zone {
+    text-align: center;
+    padding: 3rem 2rem;
+    border: 2px dashed #cbd5e1; /* Dashed border for drag-drop feel */
+    background: #ffffff;
+    transition: border-color 0.3s ease;
+    margin-bottom: 2rem;
+}
+
+.upload-zone:hover {
+    border-color: var(--primary);
+}
+
+.upload-icon {
+    width: 48px;
+    height: 48px;
+    color: var(--primary);
+    margin-bottom: 1rem;
+}
+
+.drop-area {
+    margin-top: 1.5rem;
+}
+
+.btn-secondary {
+    background: white;
+    border: 1px solid #cbd5e1;
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn-secondary:hover {
+    background: #f1f5f9;
+}
+
+/* Progress Bar Styling */
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 10px;
+    margin-top: 2rem;
+    overflow: hidden;
+}
+
+#progress-fill {
+    width: 0%;
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.4s ease;
+}
+
+#upload-section {
+    display: none; /* Hidden by default */
+}
+
+/* Hero Card Wrapper */
+.hero-action-card {
+    background: linear-gradient(135deg, #2563eb 0%, #1e3a8a 100%);
+    color: white;
+    padding: 2.5rem;
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.3);
+}
+
+.action-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+}
+
+.text-group h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.text-group p {
+    margin: 0;
+    opacity: 0.85;
+    font-size: 1.1rem;
+    line-height: 1.5;
+    max-width: 600px;
+}
+
+/* The "Main Event" Button */
+.btn-hero {
+    background: white;
+    color: #2563eb;
+    border: none;
+    padding: 1.2rem 2rem;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-hero:hover {
+    transform: scale(1.03);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Nested Upload Zone Styling */
+.upload-zone {
+    display: none; /* Controlled by JS */
+    margin-top: 2rem;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.upload-icon {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 10px;
+}
+
+.active-bids-list {
+    margin-top: 1rem;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 1.5rem;
+}
+
+.badge {
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.bids-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.bid-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+}
+
+.bid-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    border-color: #cbd5e1;
+}
+
+.bid-status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.status-tag {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.status-tag.drafting { background: #fef3c7; color: #92400e; }
+.status-tag.review { background: #dcfce7; color: #166534; }
+
+.deadline { color: #64748b; font-size: 0.85rem; }
+
+.client-name { color: #64748b; margin-bottom: 1.5rem; font-size: 0.9rem; }
+
+.progress-container-mini { margin-bottom: 1.5rem; }
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.progress-bar-mini {
+    height: 6px;
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+.progress-bar-mini .fill {
+    height: 100%;
+    background: #2563eb;
+    border-radius: 10px;
+}
+
+.btn-outline {
+    width: 100%;
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    padding: 0.6rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #334155;
+    transition: all 0.2s;
+}
+
+.btn-outline:hover { background: #f8fafc; border-color: #2563eb; color: #2563eb; }
+
+
+
+/* Login Page Styles */
+.auth-page {
+    background: #f8fafc;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.login-card {
+    background: white;
+    padding: 3rem;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    width: 100%;
+    max-width: 400px;
+    border: 1px solid #e2e8f0;
+}
+
+.auth-header { text-align: center; margin-bottom: 2rem; }
+.auth-header p { color: #64748b; margin-top: 0.5rem; }
+
+.input-group { margin-bottom: 1.5rem; }
+.input-group label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: #334155; }
+.input-group input { 
+    width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 8px; 
+    font-size: 1rem; transition: border-color 0.2s;
+}
+.input-group input:focus { outline: none; border-color: #2563eb; }
+
+.auth-footer { text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: #64748b; }
+.auth-footer a { color: #2563eb; text-decoration: none; font-weight: 600; }
+
+
+/* Workspace Page Styles */
+/* Workspace Layout Tweaks */
+.workspace-nav-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.title-group {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.workspace-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 24px;
+    margin-top: 24px;
+    height: calc(100vh - 160px); /* Adjust based on your header height */
+}
+
+.editor-container {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.editor-toolbar {
+    padding: 10px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+    display: flex;
+    gap: 10px;
+}
+
+#ai-content-editor {
+    flex: 1;
+    padding: 20px;
+    border: none;
+    resize: none;
+    font-size: 16px;
+    line-height: 1.6;
+    outline: none;
+    color: #374151;
+}
+
+.workspace-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.requirements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.requirements-list label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #4b5563;
+    cursor: pointer;
+}
+
+/* Header Action Styling */
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.btn-secondary-outline {
+    background: white;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.btn-secondary-outline:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+/* Ensure icons in buttons are sized correctly */
+.header-actions i {
+    width: 16px;
+    height: 16px;
+}
+
+/* Only targets buttons inside the Workspace header */
+.header-actions .btn-primary, 
+.header-actions .btn-hero,
+.header-actions .btn-secondary-outline {
+    display: inline-flex;    /* Fits the button size to content */
+    align-items: center;     /* Centers text & icon vertically */
+    justify-content: center; /* Centers text & icon horizontally */
+    line-height: 1;          /* Removes extra 'lead' space under text */
+    padding-top: 0;          /* Resets any uneven padding */
+    padding-bottom: 0;
+    height: 42px;            /* Gives a consistent, centered height */
+}
+
+/* Ensures the icon stays aligned with the text */
+.header-actions button i {
+    display: flex;
+    align-items: center;
+    margin-right: 8px; /* Consistent gap between icon and text */
+}
+
+/* Modal Styles */
+.modal {
+    display: none; position: fixed; z-index: 1000; left: 0; top: 0;
+    width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);
+}
+.modal-content {
+    background: white; margin: 15% auto; padding: 2rem;
+    border-radius: 12px; width: 400px; text-align: center;
+}
+.modal-content input {
+    width: 100%; padding: 12px; margin: 20px 0; border: 1px solid #cbd5e1; border-radius: 8px;
+}
+.modal-actions { display: flex; justify-content: center; gap: 10px; }

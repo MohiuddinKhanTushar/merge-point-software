@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MergePoint | AI RFP Platform</title>
+    <link rel="stylesheet" href="style.css"> <script src="https://unpkg.com/lucide@latest"></script> </head>
+    <script>
+    // This starts looking for icons the millisecond the body appears
+    const observer = new MutationObserver((mutations) => {
+        if (document.body) {
+            lucide.createIcons();
+            observer.disconnect(); // Stop looking once done
+        }
+    });
+    observer.observe(document.documentElement, { childList: true });
+</script>
+</head>
+<body>
+    
+    <div class="dashboard-container">
+        <nav class="sidebar">
+            <div class="logo">MergePoint</div>
+            <ul class="nav-links">
+                <li class="active">
+                    <a href="#"><i data-lucide="clipboard-list"></i> Active Bids</a>
+                </li>
+                <li>
+                    <a href="#"><i data-lucide="database"></i> Knowledge Base</a>
+                </li>
+                <li>
+                    <a href="#"><i data-lucide="archive"></i> RFP Library</a>
+                </li>
+                <hr>
+                <li>
+                    <a href="#"><i data-lucide="users"></i> Team Hub</a>
+                </li>
+                <li>
+                    <a href="#"><i data-lucide="sliders"></i> Settings</a>
+                </li>
+            </ul>
+            <div class="user-profile">
+                <span class="user-name">Bid Manager</span>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="welcome-text">
+                    <h1>Active Bids</h1>
+                    <p>Ready to draft your next winning proposal?</p>
+                </div>
+            </header>
+
+            <section class="hero-action-card">
+                <div class="action-content">
+                    <div class="text-group">
+                        <h2>Generate New Response</h2>
+                        <p>Upload your RFP requirements. Our AI engine will analyze the criteria and draft a tailored response using your Knowledge Base</p>
+                    </div>
+                    
+                    <button class="btn-hero" id="main-upload-trigger" onclick="toggleUpload()">
+                        <i data-lucide="sparkles"></i> Create New RFP Response
+                    </button>
+                </div>
+
+                <div class="upload-zone" id="upload-section">
+                    <div class="upload-header">
+                        <i data-lucide="file-up" class="upload-icon"></i>
+                        <h3>Drop your RFP here</h3>
+                        <p>Supports PDF or DOCX</p>
+                    </div>
+                    
+                    <div class="drop-area">
+                        <input type="file" id="file-input" hidden accept=".pdf,.docx">
+                        <button class="btn-secondary" onclick="document.getElementById('file-input').click()">
+                            Select File
+                        </button>
+                        <div id="file-list"></div>
+                    </div>
+
+                    <div id="progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div id="progress-fill"></div>
+                        </div>
+                        <p id="status-text">Uploading...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="active-bids-list">
+                <div class="section-header">
+                    <h2>In-Progress Responses</h2>
+                    <span class="badge">Live Sync Active</span>
+                </div>
+
+                <div class="bids-grid">
+                    <p id="loading-text">Loading your bids...</p>
+
+                    </div>
+            </section>
+        </main>
+    </div> 
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>lucide.createIcons();</script>
+    <script type="module" src="script.js"></script>
+</body>
+</html>

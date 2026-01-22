@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MergePoint | Workspace</title>
+    <link rel="stylesheet" href="style.css"> <script src="https://unpkg.com/lucide@latest"></script> </head>
+    <script>
+    // This starts looking for icons the millisecond the body appears
+    const observer = new MutationObserver((mutations) => {
+        if (document.body) {
+            lucide.createIcons();
+            observer.disconnect(); // Stop looking once done
+        }
+    });
+    observer.observe(document.documentElement, { childList: true });
+</script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <nav class="sidebar">
+            <div class="logo">MergePoint</div>
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> Active Bids</a></li>
+                <li><a href="#"><i data-lucide="database"></i> Knowledge Base</a></li>
+                <li><a href="#"><i data-lucide="archive"></i> RFP Library</a></li>
+                <hr>
+                <li><a href="#"><i data-lucide="users"></i> Team Hub</a></li>
+                <li><a href="#"><i data-lucide="sliders"></i> Settings</a></li>
+            </ul>
+            <div class="user-profile">
+                <span class="user-name">Bid Manager</span>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="workspace-nav-header">
+                    <div class="title-group">
+                        <h1 id="bid-title">Loading...</h1>
+                        <span class="status-tag" id="bid-status">SYNCING</span>
+                    </div>
+                    
+                    <div class="header-actions">
+                        <button class="btn-secondary-outline" id="save-bid-btn">
+                            <i data-lucide="save"></i> Save Draft
+                        </button>
+                        <button class="btn-primary" id="submit-review-btn">
+                            <i data-lucide="send"></i> Submit for Review
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="workspace-layout">
+                <section class="editor-container">
+                    <div class="editor-toolbar">
+                        <button><i data-lucide="bold"></i></button>
+                        <button><i data-lucide="italic"></i></button>
+                        <button><i data-lucide="list"></i></button>
+                    </div>
+                    <textarea id="ai-content-editor" placeholder="AI is generating your draft..."></textarea>
+                </section>
+
+                <aside class="workspace-sidebar">
+                    <div class="insight-card">
+                        <h3><i data-lucide="zap"></i> AI Analysis</h3>
+                        <p id="client-name"><strong>Client:</strong> ---</p>
+                        <p id="bid-deadline"><strong>Due:</strong> ---</p>
+                    </div>
+
+                    <div class="insight-card">
+                        <h3>Key Requirements</h3>
+                        <div class="requirements-list">
+                            </div>
+                    </div>
+                </aside>
+            </div>
+        </main>
+    </div>
+
+    <div id="review-modal" class="modal">
+        <div class="modal-content">
+            <h3>Submit for Review</h3>
+            <p>Enter the email address of the reviewer:</p>
+            <input type="email" id="reviewer-email" placeholder="colleague@company.com">
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn-primary" id="confirm-submit-btn">Send to Reviewer</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>lucide.createIcons();</script>
+    <script type="module" src="workspace.js"></script>
+</body>
+</html>
