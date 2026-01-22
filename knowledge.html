@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Base | MergePoint</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        const observer = new MutationObserver(() => {
+            if (document.body) { lucide.createIcons(); observer.disconnect(); }
+        });
+        observer.observe(document.documentElement, { childList: true });
+    </script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <nav class="sidebar">
+            <div class="logo">MergePoint</div>
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> Active Bids</a></li>
+                <li class="active"><a href="knowledge.html"><i data-lucide="book-open"></i> Knowledge Base</a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> RFP Library</a></li>
+                <hr>
+                <li><a href="#"><i data-lucide="users"></i> Team Hub</a></li>
+                <li><a href="#"><i data-lucide="sliders"></i> Settings</a></li>
+            </ul>
+            <div class="user-profile">
+                <span class="user-name">Bid Manager</span>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="welcome-text">
+                    <h1>Knowledge Base</h1>
+                    <p>Upload your Master Documents and Case Studies here.</p>
+                </div>
+            </header>
+
+            <section class="hero-action-card">
+                <div class="action-content">
+                    <div class="text-group">
+                        <h2>Master Knowledge Base</h2>
+                        <p>Upload your company's master documents and case studies. Our AI uses these to ensure every response is accurate and tailored to your brand.</p>
+                    </div>
+                    <button class="btn-hero" id="knowledge-upload-trigger">
+                        <i data-lucide="database"></i> Manage Documents
+                    </button>
+                </div>
+
+                <div class="upload-zone" id="knowledge-upload-section">
+                    <div class="upload-header">
+                        <i data-lucide="file-up" class="upload-icon"></i>
+                        <h3>Upload Master Document</h3>
+                        <p>Supports PDF or DOCX</p>
+                    </div>
+                    
+                    <div class="drop-area">
+                        <input type="file" id="knowledge-file-input" hidden accept=".pdf,.docx">
+                        <button class="btn-secondary" onclick="document.getElementById('knowledge-file-input').click()">
+                            Select Master File
+                        </button>
+                        <div id="knowledge-file-list"></div>
+                    </div>
+
+                    <div id="knowledge-progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div id="knowledge-progress-fill"></div>
+                        </div>
+                        <p id="knowledge-status-text">Uploading to Library...</p>
+                    </div>
+                </div>
+            </section> <section class="active-bids-list">
+                <div class="section-header">
+                    <div class="title-group">
+                        <h2>Your Library</h2>
+                    </div>
+                </div>
+                <div id="library-grid" class="bids-grid">
+                    <p class="loading-state">Loading library...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script type="module" src="knowledge.js"></script>
+</body>
+</html>

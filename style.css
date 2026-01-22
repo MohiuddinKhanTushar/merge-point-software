@@ -530,3 +530,42 @@ body {
     width: 100%; padding: 12px; margin: 20px 0; border: 1px solid #cbd5e1; border-radius: 8px;
 }
 .modal-actions { display: flex; justify-content: center; gap: 10px; }
+
+/* Knowledge Base Styles */
+/* Ensure the upload zone is visible and styled correctly inside the hero card */
+.hero-action-card .upload-zone {
+    display: none; /* Controlled by JS */
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-top: 2rem;
+    color: white;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.hero-action-card .upload-icon {
+    color: white; /* Make the icon white to match the blue card theme */
+}
+
+.hero-action-card .upload-header h3 {
+    margin-top: 0;
+    color: white;
+}
+
+.hero-action-card .btn-secondary {
+    background: white;
+    color: var(--primary);
+    border: none;
+}
