@@ -129,14 +129,45 @@
             </div>
 
             <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Document Summary</span>
-            <div id="modal-text" class="summary-box">
+            <div id="modal-text" class="summary-box" style="margin-bottom: 1.5rem;"></div>
+
+            <div class="status-selector-group" style="padding-top: 1.5rem; border-top: 1px solid #f1f5f9;">
+                <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #64748b; margin-bottom: 0.5rem;">
+                    Final Outcome
+                </label>
+                <div style="display: flex; gap: 10px;">
+                    <select id="modal-status-select" class="btn-secondary-outline" style="flex: 1; height: 42px; text-align: left;">
+                        <option value="pending">⏳ Pending Decision</option>
+                        <option value="won">🏆 Won (Contract Awarded)</option>
+                        <option value="lost">❌ Lost</option>
+                    </select>
+                    <button class="btn-hero" onclick="saveProjectStatus()" style="padding: 0 1.5rem; height: 42px; font-size: 0.9rem;">
+                        Save Status
+                    </button>
                 </div>
+            </div>
         </div>
 
         <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 10px;">
             <button class="btn-secondary-outline" onclick="closeArchiveModal()">Close</button>
             <button class="btn-primary">Download PDF</button>
         </div>
+    </div>
+</div>
+
+<div class="status-selector-group" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #f1f5f9;">
+    <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #64748b; margin-bottom: 0.5rem;">
+        Final Outcome
+    </label>
+    <div style="display: flex; gap: 10px;">
+        <select id="modal-status-select" class="btn-secondary-outline" style="flex: 1; height: 42px; text-align: left;">
+            <option value="pending">Pending Decision</option>
+            <option value="won">Won (Contract Awarded)</option>
+            <option value="lost">Lost</option>
+        </select>
+        <button class="btn-hero" onclick="saveProjectStatus()" style="padding: 0 1.5rem; height: 42px; font-size: 0.9rem;">
+            Save Status
+        </button>
     </div>
 </div>
 
