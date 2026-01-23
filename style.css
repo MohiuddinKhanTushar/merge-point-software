@@ -14,8 +14,61 @@
     padding: 2rem;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     box-sizing: border-box; /* Added to include padding in the 260px width */
     flex-shrink: 0; /* Added to ensure flexbox doesn't squash it */
+    height: 100vh; /* Ensure it spans full viewport height */
+}
+
+/* Footer Container */
+.sidebar-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 1.5rem;
+    margin-top: auto; /* Safety push to the bottom */
+}
+
+/* User Profile Styling */
+.user-profile-mini {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 1rem; /* Aligns with navigation text */
+    margin-bottom: 0.5rem;
+}
+
+.user-profile-mini .avatar {
+    width: 32px;
+    height: 32px;
+    background: var(--primary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: white;
+}
+
+.user-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: white;
+}
+
+/* Logout Link Aesthetics */
+.logout-nav {
+    margin-top: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.logout-link {
+    color: #fca5a5 !important; /* Soft red text */
+}
+
+.logout-link:hover {
+    background: rgba(239, 68, 68, 0.1) !important; /* Subtle red hover */
+    color: #ef4444 !important; /* Brighter red on hover */
 }
 
 /* 2. Prevent Icon Flicker: Reserve 18px square for every icon */
