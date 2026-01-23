@@ -3,28 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knowledge Base | MergePoint</title>
+    <title>MergePoint | AI RFP Platform</title>
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://unpkg.com/lucide@latest"></script>
+
     <script>
-        const observer = new MutationObserver(() => {
-            if (document.body) { lucide.createIcons(); observer.disconnect(); }
-        });
-        observer.observe(document.documentElement, { childList: true });
+        (function() {
+            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+            if (isCollapsed) {
+                document.documentElement.classList.add('sidebar-is-collapsed');
+            }
+        })();
     </script>
 </head>
 <body>
     <div class="dashboard-container">
-        <nav class="sidebar">
+        <nav class="sidebar" id="sidebar">
     <div class="logo">MergePoint</div>
+    <button id="sidebar-toggle" class="toggle-btn">
+            <i data-lucide="chevron-left"></i>
+        </button>
     
     <ul class="nav-links">
-        <li><a href="index.html"><i data-lucide="clipboard-list"></i> Active Bids</a></li>
-        <li class="active"><a href="knowledge.html"><i data-lucide="book-open"></i> Knowledge Base</a></li>
-        <li><a href="archive.html"><i data-lucide="archive"></i> RFP Library</a></li>
+        <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+        <li class="active"><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+        <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
-        <li><a href="#"><i data-lucide="users"></i> Team Hub</a></li>
-        <li><a href="#"><i data-lucide="sliders"></i> Settings</a></li>
+        <li><a href="#"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+        <li><a href="#"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
     </ul>
 
     <div class="sidebar-footer">
@@ -35,7 +42,7 @@
         <ul class="nav-links logout-nav">
             <li>
                 <a href="#" id="logout-btn" class="logout-link">
-                    <i data-lucide="log-out"></i> Logout
+                    <i data-lucide="log-out"></i> <span>Logout</span>
                 </a>
             </li>
         </ul>

@@ -1,3 +1,11 @@
+import { initSidebar } from './ui-manager.js';
+// ... your other imports ...
+
+// Start the sidebar logic
+initSidebar();
+
+// ... the rest of your firebase code ...
+
 import { db, auth } from './firebase-config.js';
 import { doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";

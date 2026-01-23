@@ -1,3 +1,11 @@
+import { initSidebar } from './ui-manager.js';
+// ... your other imports ...
+
+// Start the sidebar logic
+initSidebar();
+
+// ... the rest of your firebase code ...
+
 import { storage, db, auth } from './firebase-config.js'; 
 import { ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { collection, addDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";

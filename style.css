@@ -1,9 +1,73 @@
+/* Force icons to be visible even if Lucide is slow to swap them */
+[data-lucide] {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    stroke: currentColor; /* Ensures they take the text color */
+    fill: none;
+}
+
+/* Specific fix for the <i> tag before it becomes an <svg> */
+i[data-lucide] {
+    min-width: 18px;
+    min-height: 18px;
+}
+
+/* IMMEDIATE STATE LOCK */
+html.sidebar-is-collapsed .sidebar {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    padding: 2rem 0.5rem !important;
+}
+
+html.sidebar-is-collapsed .sidebar .logo,
+html.sidebar-is-collapsed .sidebar .user-name,
+html.sidebar-is-collapsed .sidebar .nav-links li a span {
+    display: none !important;
+}
+
+/* STOP THE ICON JIGGLE */
+/* This reserves an 18px square for icons so they don't 'pop' in */
+.nav-links i, 
+.nav-links svg, 
+[data-lucide] {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    display: inline-block !important;
+    flex-shrink: 0;
+}
+
+/* Ensure icons are centered when collapsed */
+html.sidebar-is-collapsed .nav-links li a {
+    justify-content: center !important;
+    gap: 0 !important;
+}
+
+/* If the top-level HTML has this class, force the sidebar to be small immediately */
+.sidebar-is-collapsed .sidebar {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    padding: 2rem 0.5rem !important;
+}
+
+/* Hide the text elements instantly */
+.sidebar-is-collapsed .sidebar .logo,
+.sidebar-is-collapsed .sidebar .user-name,
+.sidebar-is-collapsed .sidebar .nav-links li a span {
+    display: none !important;
+}
+
 /* 1. Prevent Layout Shift: Reserve sidebar space immediately */
 .dashboard-container {
     display: flex;
     height: 100vh;
     background-color: #f8fafc; /* Matches your --bg-light */
 }
+
 
 .sidebar {
     width: 260px;
@@ -18,6 +82,80 @@
     box-sizing: border-box; /* Added to include padding in the 260px width */
     flex-shrink: 0; /* Added to ensure flexbox doesn't squash it */
     height: 100vh; /* Ensure it spans full viewport height */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.sidebar.no-transition {
+    transition: none !important;
+}
+
+/* Sidebar interaction */
+.sidebar .logo {
+    transition: opacity 0.2s ease;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+}
+
+.toggle-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    margin-left: auto;
+
+}
+
+
+.toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+/* --- Collapsed State --- */
+.sidebar.collapsed {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+    padding: 2rem 0.5rem;
+}
+
+/* When the sidebar has the .collapsed class, reset the margin to center the icon */
+.sidebar.collapsed .toggle-btn {
+    margin-left: 0;
+    margin-right: 0;
+    /* Ensure it stays perfectly in the middle of the 80px width */
+    margin: 0 auto; 
+}
+
+.sidebar.collapsed .logo,
+.sidebar.collapsed .user-name,
+.sidebar.collapsed .nav-links li a span {
+    display: none !important;
+}
+
+.sidebar.collapsed .nav-links li a {
+    justify-content: center;
+    padding: 0.8rem 0;
+}
+
+.sidebar.collapsed .user-profile-mini {
+    padding: 0;
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-header {
+    justify-content: center;
 }
 
 /* Footer Container */
@@ -158,10 +296,14 @@ body {
     display: flex; /* Aligns icon and text in a row */
     align-items: center;
     gap: 12px; /* Adds space between icon and text */
-    padding: 0.8rem 1rem;
+    padding: 0.8rem 0.75rem;
     color: #94a3b8;
     border-radius: 8px;
     transition: all 0.2s ease;
+    white-space: nowrap; 
+    overflow: hidden;
+    text-overflow: ellipsis;
+    
 }
 
 .nav-links i {

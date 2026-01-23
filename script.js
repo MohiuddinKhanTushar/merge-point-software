@@ -1,3 +1,11 @@
+import { initSidebar } from './ui-manager.js';
+// ... your other imports ...
+
+// Start the sidebar logic
+initSidebar();
+
+// ... the rest of your firebase code ...
+
 import { db, auth, app } from './firebase-config.js'; 
 import { checkAuthState, logoutUser } from './auth.js';
 import { 
@@ -149,3 +157,4 @@ async function createNewBid(fileName) {
         console.error("Error adding document: ", e);
     }
 }
+
