@@ -96,22 +96,21 @@ function renderLibrary(data) {
 
         return `
             <tr>
-                <td><strong>${item.bidName || 'Untitled'}</strong></td>
-                <td>${item.client || 'N/A'}</td>
-                <td><span class="badge">${item.industry || 'General'}</span></td>
-                <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
-                <td style="text-align: right;">
-                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                        <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.viewProject('${item.id}')">
-                            <i data-lucide="eye" style="width:14px; height:14px;"></i> View
-                        </button>
-                        <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.restoreToActive('${item.id}')">
-                            <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `;
+        <td><strong>${item.bidName || 'Untitled'}</strong></td>
+        <td>${item.client || 'N/A'}</td>
+        <td><span class="badge">${item.industry || 'General'}</span></td>
+        <td>${dateDisplay}</td> <td><span class="status-pill ${statusClass}">${statusLabel}</span></td> <td style="text-align: right;">
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.viewProject('${item.id}')">
+                    <i data-lucide="eye" style="width:14px; height:14px;"></i> View
+                </button>
+                <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.restoreToActive('${item.id}')">
+                    <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+`;
     }).join('');
     
     if (window.lucide) window.lucide.createIcons();
