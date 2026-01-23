@@ -5,17 +5,21 @@ import {
     collection, 
     query, 
     where, 
-    onSnapshot 
+    onSnapshot,
+    doc,
+    getDoc,
+    addDoc,
+    deleteDoc,
+    serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 let allArchiveData = []; // Local cache for searching/filtering
 
 /**
  * Main entry point for the RFP Library Page
- * Replaces the roles of script.js for this specific page
  */
 export function initLibrary() {
-    // 1. Initialize Global UI (Sidebar collapse logic)
+    // 1. Initialize Global UI
     initSidebar();
 
     // 2. Setup Global Logout Button
@@ -50,7 +54,7 @@ export function initLibrary() {
 }
 
 /**
- * Fetch data from the 'archived_rfps' collection in Firestore
+ * Fetch data from the 'archived_rfps' collection
  */
 function fetchArchivedBids(userId) {
     const archiveQuery = query(
@@ -94,7 +98,7 @@ function performFilter() {
 }
 
 /**
- * Render rows into the table and refresh Lucide icons
+ * Render rows into the table with View and Restore actions
  */
 function renderLibrary(data) {
     const tableBody = document.getElementById('library-body');
@@ -111,7 +115,6 @@ function renderLibrary(data) {
     }
 
     tableBody.innerHTML = data.map(item => {
-        // Format the Firebase Timestamp
         const dateDisplay = item.dateArchived?.toDate 
             ? item.dateArchived.toDate().toLocaleDateString() 
             : 'No Date';
@@ -123,52 +126,106 @@ function renderLibrary(data) {
                 <td><span class="badge">${item.industry || 'General'}</span></td>
                 <td>${dateDisplay}</td>
                 <td style="text-align: right;">
-                    <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.viewProject('${item.id}')">
-                    <i data-lucide="eye" style="width:14px; height:14px;"></i> View
-                </button>
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                        <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.viewProject('${item.id}')">
+                            <i data-lucide="eye" style="width:14px; height:14px;"></i> View
+                        </button>
+                        <button class="btn-secondary-outline" style="padding: 4px 8px;" title="Restore to Active" onclick="window.restoreToActive('${item.id}')">
+                            <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
     }).join('');
     
-    // Refresh icons for the newly injected "View" buttons
     if (window.lucide) {
         window.lucide.createIcons();
     }
 }
 
-// Function to Open the Modal and fill it with data
+/**
+ * RESTORE LOGIC
+ * Moves an archived project back to the active 'bids' collection
+ */
+window.restoreToActive = async (archiveId) => {
+    window.showCustomConfirm(
+        "Restore to Active?", 
+        "This project will move back to your Dashboard for further editing.", 
+        async () => {
+            try {
+                const archiveRef = doc(db, "archived_rfps", archiveId);
+                const archiveSnap = await getDoc(archiveRef);
+
+                if (archiveSnap.exists()) {
+                    const data = archiveSnap.data();
+                    await addDoc(collection(db, "bids"), {
+                        ...data,
+                        status: "review",
+                        deadline: serverTimestamp(), 
+                        createdAt: serverTimestamp()
+                    });
+                    await deleteDoc(archiveRef);
+                }
+            } catch (e) {
+                console.error("Restore failed:", e);
+            }
+        }
+    );
+};
+
+/**
+ * MODAL LOGIC
+ */
 window.viewProject = (id) => {
     const project = allArchiveData.find(p => p.id === id);
     if (!project) return;
 
-    // Fill the modal with content
     document.getElementById('modal-project-name').innerText = project.bidName || 'Untitled Project';
     document.getElementById('modal-client').innerText = project.client || 'N/A';
     document.getElementById('modal-industry').innerText = project.industry || 'General';
-    document.getElementById('modal-text').innerText = project.summary || "No summary text available for this archive.";
-
-    // Check if summary exists, otherwise provide a placeholder
+    
     const summaryContent = project.summary || "No archived text available for this entry. You can add a 'summary' field to this document in the Firebase Console to see it here.";
     document.getElementById('modal-text').innerText = summaryContent;
 
-    // Show the modal
     const modal = document.getElementById('archive-modal');
     modal.style.display = 'flex';
 
-    // Refresh icons inside the modal (like the X button)
     if (window.lucide) window.lucide.createIcons();
 };
 
-// Function to Close the Modal
 window.closeArchiveModal = () => {
     document.getElementById('archive-modal').style.display = 'none';
 };
 
-// Optional: Close modal if user clicks the dark background area
 window.onclick = function(event) {
     const modal = document.getElementById('archive-modal');
     if (event.target === modal) {
         modal.style.display = "none";
     }
+};
+
+// Utility to show our custom confirmation
+window.showCustomConfirm = (title, message, onConfirm) => {
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-title').innerText = title;
+    document.getElementById('confirm-message').innerText = message;
+    
+    const actionBtn = document.getElementById('confirm-action-btn');
+    
+    // We clone the button to strip old event listeners
+    const newActionBtn = actionBtn.cloneNode(true);
+    actionBtn.parentNode.replaceChild(newActionBtn, actionBtn);
+    
+    newActionBtn.addEventListener('click', () => {
+        onConfirm();
+        closeConfirmModal();
+    });
+
+    modal.style.display = 'flex';
+    if (window.lucide) lucide.createIcons({ root: modal });
+};
+
+window.closeConfirmModal = () => {
+    document.getElementById('confirm-modal').style.display = 'none';
 };

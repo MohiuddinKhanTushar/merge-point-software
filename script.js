@@ -1,11 +1,4 @@
 import { initSidebar } from './ui-manager.js';
-// ... your other imports ...
-
-// Start the sidebar logic
-initSidebar();
-
-// ... the rest of your firebase code ...
-
 import { db, auth, app } from './firebase-config.js'; 
 import { checkAuthState, logoutUser } from './auth.js';
 import { 
@@ -14,10 +7,15 @@ import {
     where, 
     onSnapshot, 
     addDoc, 
+    doc, 
+    getDoc, 
+    deleteDoc, 
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// We don't need initializeFirestore here anymore because it's done in the config!
+// Start the sidebar logic
+initSidebar();
+
 const firestore = db; 
 
 // Protect the page
@@ -26,7 +24,7 @@ checkAuthState((user) => {
     loadActiveBids(user.uid);
 });
 
-// Hook up that Logout button in your sidebar
+// Hook up Logout
 document.getElementById('logout-btn').addEventListener('click', logoutUser);
 
 const fileInput = document.getElementById('file-input');
@@ -46,21 +44,18 @@ function toggleUpload() {
     
     if (section.style.display === "none" || section.style.display === "") {
         section.style.display = "block";
-        // Manual icon swap to avoid global flicker
         triggerBtn.innerHTML = '<i data-lucide="x"></i> Cancel Upload';
     } else {
         section.style.display = "none";
         triggerBtn.innerHTML = '<i data-lucide="sparkles"></i> Create New RFP Response';
     }
     
-    // Target ONLY the button icons, not the whole page/sidebar
     lucide.createIcons({
         attrs: { class: 'lucide' },
         nameAttr: 'data-lucide',
         elements: [triggerBtn] 
     });
 }
-
 window.toggleUpload = toggleUpload;
 
 function loadActiveBids(userId) {
@@ -73,15 +68,11 @@ function loadActiveBids(userId) {
     const bidsGrid = document.querySelector('.bids-grid');
 
     onSnapshot(bidsQuery, (snapshot) => {
-        console.log(`Found ${snapshot.size} bids for user ${userId}`);
-
-        // 1. If no bids, update text and exit
         if (snapshot.empty) {
             bidsGrid.innerHTML = "<p>No active bids found. Try creating one!</p>";
             return;
         }
 
-        // 2. Build the HTML in memory first to prevent multiple "paints"
         const tempContainer = document.createElement('div');
         let combinedHtml = "";
 
@@ -89,15 +80,12 @@ function loadActiveBids(userId) {
             const bid = doc.data();
             const bidId = doc.id;
             
-            // Date Calculation
             let daysLeft = "TBD";
             try {
                 if (bid.deadline && typeof bid.deadline.toDate === 'function') {
                     daysLeft = Math.ceil((bid.deadline.toDate() - new Date()) / (1000 * 60 * 60 * 24));
                 }
-            } catch (e) {
-                console.error("Date error for bid:", bidId, e);
-            }
+            } catch (e) { console.error("Date error:", e); }
 
             combinedHtml += `
                 <div class="bid-card" id="${bidId}">
@@ -116,31 +104,58 @@ function loadActiveBids(userId) {
                             <div class="fill" style="width: ${bid.progress || 0}%;"></div>
                         </div>
                     </div>
-                    <button class="btn-outline" onclick="window.location.href='/workspace.html?id=${bidId}'">Open Workspace</button>
+                    <div style="display: flex; gap: 10px; margin-top: 1rem;">
+                        <button class="btn-outline" style="flex: 1;" onclick="window.location.href='/workspace.html?id=${bidId}'">Open Workspace</button>
+                        <button class="btn-secondary-outline" title="Archive Bid" onclick="archiveBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                            <i data-lucide="archive" style="width: 18px; height: 18px;"></i>
+                        </button>
+                    </div>
                 </div>
             `;
         });
 
-        // 3. ATOMIC SWAP: replaceChildren clears AND adds in one single browser frame
-        // This is the most efficient way to prevent flickering.
         tempContainer.innerHTML = combinedHtml;
         bidsGrid.replaceChildren(...tempContainer.childNodes);
 
-        // 4. Scoped Icon Refresh
         if (window.lucide) {
-            lucide.createIcons({
-                root: bidsGrid
-            });
+            lucide.createIcons({ root: bidsGrid });
         }
     });
 }
+
+// THE ARCHIVE LOGIC
+async function archiveBid(bidId) {
+    window.showCustomConfirm(
+        "Archive Project?", 
+        "This will move the project to your RFP Library and remove it from active bids.", 
+        async () => {
+            try {
+                const bidRef = doc(firestore, "bids", bidId);
+                const bidSnap = await getDoc(bidRef);
+
+                if (bidSnap.exists()) {
+                    const bidData = bidSnap.data();
+                    await addDoc(collection(firestore, "archived_rfps"), {
+                        ...bidData,
+                        dateArchived: serverTimestamp(),
+                        summary: `Archived on ${new Date().toLocaleDateString()}`
+                    });
+                    await deleteDoc(bidRef);
+                }
+            } catch (error) {
+                console.error("Archive error:", error);
+            }
+        }
+    );
+}
+window.archiveBid = archiveBid;
 
 async function createNewBid(fileName) {
     const user = auth.currentUser;
     if (!user) return alert("Please log in first!");
 
     try {
-        const docRef = await addDoc(collection(firestore, "bids"), {
+        await addDoc(collection(firestore, "bids"), {
             bidName: fileName.split('.')[0], 
             client: "Awaiting Analysis...",
             deadline: serverTimestamp(), 
@@ -149,12 +164,31 @@ async function createNewBid(fileName) {
             ownerId: user.uid,
             createdAt: serverTimestamp()
         });
-
-        console.log("Document written with ID: ", docRef.id);
         toggleUpload(); 
-        
-    } catch (e) {
-        console.error("Error adding document: ", e);
-    }
+    } catch (e) { console.error("Error adding document: ", e); }
 }
 
+// Utility to show our custom confirmation
+window.showCustomConfirm = (title, message, onConfirm) => {
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-title').innerText = title;
+    document.getElementById('confirm-message').innerText = message;
+    
+    const actionBtn = document.getElementById('confirm-action-btn');
+    
+    // We clone the button to strip old event listeners
+    const newActionBtn = actionBtn.cloneNode(true);
+    actionBtn.parentNode.replaceChild(newActionBtn, actionBtn);
+    
+    newActionBtn.addEventListener('click', () => {
+        onConfirm();
+        closeConfirmModal();
+    });
+
+    modal.style.display = 'flex';
+    if (window.lucide) lucide.createIcons({ root: modal });
+};
+
+window.closeConfirmModal = () => {
+    document.getElementById('confirm-modal').style.display = 'none';
+};

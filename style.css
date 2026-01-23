@@ -885,3 +885,61 @@ body {
 }
 .status-pill.won { background: #dcfce7; color: #15803d; }
 .status-pill.lost { background: #fee2e2; color: #b91c1c; }
+
+/* --- Bid Card Action Buttons --- */
+.card-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 1rem;
+}
+
+.card-actions .btn-outline {
+    flex: 1; /* Makes "Open Workspace" take available space */
+}
+
+/* Square icon button for archiving */
+.btn-archive-action {
+    width: 42px;
+    height: 42px;
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-archive-action:hover {
+    background: #f1f5f9;
+    color: #2563eb;
+    border-color: #2563eb;
+    transform: translateY(-1px);
+}
+
+.actions-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.actions-cell .btn-secondary-outline {
+    padding: 6px 10px;
+    height: 32px; /* Slightly smaller for table rows */
+    font-size: 0.85rem;
+}
+
+.actions-cell i {
+    width: 14px;
+    height: 14px;
+}
+
+/* Ensure modal action buttons are centered */
+#confirm-modal .modal-content div[style*="display: flex"] button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}

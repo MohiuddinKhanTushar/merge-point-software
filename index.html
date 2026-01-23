@@ -108,6 +108,21 @@
         </main>
     </div> 
 
+<div id="confirm-modal" class="modal">
+    <div class="modal-content" style="max-width: 400px; text-align: center;">
+        <div class="modal-header" style="justify-content: center; border: none;">
+            <i data-lucide="alert-circle" style="width: 48px; height: 48px; color: var(--primary); margin-bottom: 1rem;"></i>
+        </div>
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-message" style="color: #64748b; margin-bottom: 2rem;">This action cannot be undone easily.</p>
+        
+        <div style="display: flex; gap: 12px;">
+            <button class="btn-secondary-outline" style="flex: 1;" onclick="closeConfirmModal()">Cancel</button>
+            <button id="confirm-action-btn" class="btn-hero" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Confirm</button>
+        </div>
+    </div>
+</div>
+
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>lucide.createIcons();</script>
     <script type="module" src="script.js"></script>
