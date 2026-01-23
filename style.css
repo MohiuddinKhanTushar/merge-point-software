@@ -712,19 +712,68 @@ body {
     margin-right: 8px; /* Consistent gap between icon and text */
 }
 
-/* Modal Styles */
+/* --- Updated Modal Styles --- */
 .modal {
-    display: none; position: fixed; z-index: 1000; left: 0; top: 0;
-    width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);
+    display: none; 
+    position: fixed; 
+    z-index: 1000; 
+    left: 0; 
+    top: 0;
+    width: 100%; 
+    height: 100%; 
+    background-color: rgba(0,0,0,0.6); /* Darkens the background */
+    backdrop-filter: blur(4px);        /* Subtle blur for depth */
+    align-items: center;               /* Centering logic */
+    justify-content: center;
 }
+
 .modal-content {
-    background: white; margin: 15% auto; padding: 2rem;
-    border-radius: 12px; width: 400px; text-align: center;
+    background: white; 
+    padding: 2rem;
+    border-radius: 12px; 
+    width: 90%;
+    max-width: 550px; /* Wider for RFP text */
+    text-align: left; /* Changed from center to left for better readability */
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    animation: modalSlideUp 0.3s ease-out;
 }
-.modal-content input {
-    width: 100%; padding: 12px; margin: 20px 0; border: 1px solid #cbd5e1; border-radius: 8px;
+
+/* New sub-classes for the Archive View */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 1rem;
 }
-.modal-actions { display: flex; justify-content: center; gap: 10px; }
+
+.modal-header h2 { margin: 0; font-size: 1.25rem; }
+
+.close-modal {
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.summary-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.2rem;
+    margin-top: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+    line-height: 1.6;
+    color: #475569;
+}
+
+@keyframes modalSlideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
 
 /* Knowledge Base Styles */
 /* Ensure the upload zone is visible and styled correctly inside the hero card */
@@ -764,3 +813,75 @@ body {
     color: var(--primary);
     border: none;
 }
+
+/* RFP Library Styles */
+/* Search & Filter Bar */
+.search-filter-bar {
+    display: flex;
+    gap: 15px;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    align-items: center;
+}
+
+.search-input-wrapper {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    background: #f1f5f9;
+    padding: 8px 15px;
+    border-radius: 8px;
+    gap: 10px;
+}
+
+.search-input-wrapper input {
+    border: none;
+    background: transparent;
+    width: 100%;
+    outline: none;
+    font-size: 0.95rem;
+}
+
+.search-filter-bar select {
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    color: #475569;
+}
+
+/* Library Table */
+.library-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.library-table th {
+    padding: 12px 15px;
+    border-bottom: 2px solid #f1f5f9;
+    color: #64748b;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.library-table td {
+    padding: 15px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.95rem;
+    color: #334155;
+}
+
+.library-table tr:hover {
+    background-color: #f8fafc;
+}
+
+/* Status Pill for Won/Lost */
+.status-pill {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.status-pill.won { background: #dcfce7; color: #15803d; }
+.status-pill.lost { background: #fee2e2; color: #b91c1c; }
