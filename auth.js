@@ -18,6 +18,9 @@ export async function loginUser(email, password) {
 // --- 2. LOGOUT LOGIC ---
 export async function logoutUser() {
     try {
+        // Clear the sidebar state so it's fresh for the next login
+        localStorage.removeItem('sidebar-collapsed');
+        
         await signOut(auth);
         window.location.href = 'login.html';
     } catch (error) {
