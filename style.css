@@ -961,3 +961,49 @@ body {
     text-align: center;
 }
 
+/* Updated Analytics Grid & Containers */
+.analytics-grid {
+    display: grid; 
+    grid-template-columns: 1fr 1fr; /* Adjusted ratio for better balance */
+    gap: 24px; 
+    margin-top: 1rem;
+    align-items: start; /* Prevents containers from stretching weirdly */
+    width: 100%;
+}
+
+.analytics-grid .card {
+    min-width: 0; 
+}
+
+.chart-container {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 1.25rem; /* Slightly tighter padding */
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center the wrapper and title */
+    min-height: 280px;  /* Reduced from 350px */
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.chart-container h3 {
+    width: 100%; /* Keep title left-aligned */
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem; /* Slightly smaller text */
+    color: #1e293b;
+}
+
+/* This wrapper is the "secret sauce" for Chart.js */
+.chart-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 240px; /* This is the "Size Controller" - adjust as needed */
+    margin: 0 auto;
+}
+.chart-wrapper canvas {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+}
