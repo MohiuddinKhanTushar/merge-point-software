@@ -1,14 +1,19 @@
 import { initSidebar } from './ui-manager.js';
-// ... your other imports ...
-
-// Start the sidebar logic
-initSidebar();
-
-// ... the rest of your firebase code ...
-
 import { storage, db, auth } from './firebase-config.js'; 
 import { ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-import { collection, addDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { 
+    collection, 
+    addDoc, 
+    onSnapshot, 
+    query, 
+    where, 
+    getDocs, 
+    orderBy, 
+    serverTimestamp 
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// Initialize Sidebar
+initSidebar();
 
 // 1. Selectors
 const libraryGrid = document.getElementById('library-grid');
@@ -31,17 +36,13 @@ auth.onAuthStateChanged((user) => {
 
 // 3. Toggle Upload Section
 if (uploadTrigger && uploadSection) {
-    uploadSection.style.display = 'none'; // Ensure hidden on load
+    uploadSection.style.display = 'none';
     uploadTrigger.addEventListener('click', () => {
-        if (uploadSection.style.display === 'none' || uploadSection.style.display === '') {
-            uploadSection.style.display = 'block';
-        } else {
-            uploadSection.style.display = 'none';
-        }
+        uploadSection.style.display = (uploadSection.style.display === 'none') ? 'block' : 'none';
     });
 }
 
-// 4. Handle Upload Logic
+// 4. Handle Upload Logic with Versioning (Workflow Step 2B)
 function setupUpload(userId) {
     if (!fileInput) return;
 
@@ -50,10 +51,22 @@ function setupUpload(userId) {
         if (!file) return;
 
         progressContainer.style.display = 'block';
-        statusText.innerText = "Uploading to Knowledge Base...";
+        statusText.innerText = "Checking document versions...";
 
         try {
-            const storageRef = ref(storage, `knowledge/${userId}/${file.name}`);
+            // 4a. Versioning Logic: Check how many times this filename exists for this user
+            const q = query(
+                collection(db, "knowledge"), 
+                where("ownerId", "==", userId),
+                where("fileName", "==", file.name)
+            );
+            const versionSnap = await getDocs(q);
+            const nextVersion = versionSnap.size + 1;
+
+            statusText.innerText = `Uploading Version ${nextVersion}...`;
+
+            // 4b. Storage Upload (Path includes version to prevent overwriting)
+            const storageRef = ref(storage, `knowledge/${userId}/v${nextVersion}_${file.name}`);
             const uploadTask = uploadBytesResumable(storageRef, file);
 
             uploadTask.on('state_changed', 
@@ -68,11 +81,14 @@ function setupUpload(userId) {
                 async () => {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-                    // Uses 'db' from imports
+                    // 4c. Firestore Record (Step 2B: status set to 'processing')
                     await addDoc(collection(db, "knowledge"), {
                         ownerId: userId,
+                        orgId: "default-org", // Prepared for future Org boundary logic
                         fileName: file.name,
                         fileUrl: downloadURL,
+                        version: nextVersion,
+                        status: "processing", 
                         type: "master-document",
                         uploadedAt: serverTimestamp()
                     });
@@ -81,7 +97,7 @@ function setupUpload(userId) {
                         progressContainer.style.display = 'none';
                         progressFill.style.width = '0%';
                         uploadSection.style.display = 'none'; 
-                        alert("Master Document added successfully!");
+                        alert(`Master Document v${nextVersion} uploaded successfully! AI is now processing chunks.`);
                     }, 1000);
                 }
             );
@@ -91,15 +107,16 @@ function setupUpload(userId) {
     });
 }
 
-// 5. Load Library (The fixed function)
+// 5. Load Library with Status Indicators
 function loadLibrary(userId) {
     if (!libraryGrid) return;
 
-    // Fixed the variable reference to 'db'
+    // Use a simple query first to ensure data displays
     const q = query(collection(db, "knowledge"), where("ownerId", "==", userId));
 
     onSnapshot(q, (snapshot) => {
-        libraryGrid.innerHTML = ''; // Clear the "Loading..." text
+        // Clear "Loading Library..." immediately
+        libraryGrid.innerHTML = ''; 
 
         if (snapshot.empty) {
             libraryGrid.innerHTML = `
@@ -111,33 +128,28 @@ function loadLibrary(userId) {
 
         snapshot.forEach((doc) => {
             const data = doc.data();
-            const dateStr = data.uploadedAt?.toDate() 
-                ? data.uploadedAt.toDate().toLocaleDateString() 
-                : 'Just now';
-
+            // Fallback for date if it's missing
+            const dateStr = data.uploadedAt?.toDate ? data.uploadedAt.toDate().toLocaleDateString() : 'New Document';
+            
             const cardHtml = `
                 <div class="bid-card">
                     <div class="bid-status-row">
-                        <span class="status-tag drafting">Master Doc</span>
+                        <span class="status-tag won">v${data.version || 1} ${data.status || 'READY'}</span>
                         <span class="deadline">${dateStr}</span>
                     </div>
                     <div class="bid-info">
                         <h3>${data.fileName}</h3>
-                        <p class="client-name">Company Reference Material</p>
+                        <p class="client-name">Master Reference</p>
                     </div>
                     <div class="bid-footer" style="margin-top: 1.5rem;">
                         <button class="btn-outline" style="width: 100%;" onclick="window.open('${data.fileUrl}', '_blank')">
-                            <i data-lucide="external-link" style="width: 16px; height: 16px; margin-right: 8px;"></i>
                             View Document
                         </button>
                     </div>
-                </div>
-            `;
+                </div>`;
             libraryGrid.insertAdjacentHTML('beforeend', cardHtml);
         });
 
-        if (window.lucide) {
-            lucide.createIcons({ root: libraryGrid });
-        }
+        if (window.lucide) lucide.createIcons({ root: libraryGrid });
     });
 }

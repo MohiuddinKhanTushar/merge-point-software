@@ -21,35 +21,35 @@
     
     <div class="dashboard-container">
         <nav class="sidebar" id="sidebar">
-    <div class="logo">MergePoint</div>
-    <button id="sidebar-toggle" class="toggle-btn">
-            <i data-lucide="chevron-left"></i>
-        </button>
-    
-    <ul class="nav-links">
-        <li class="active"><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
-        <li><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
-        <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
-        <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
-        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
-        <li><a href="#"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
-        <li><a href="#"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
-    </ul>
+            <div class="logo">MergePoint</div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+            
+            <ul class="nav-links">
+                <li class="active"><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li><a href="#"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li><a href="#"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
 
-    <div class="sidebar-footer">
-        <div class="user-profile-mini">
-            <div class="avatar">BM</div>
-            <span class="user-name">Bid Manager</span>
-        </div>
-        <ul class="nav-links logout-nav">
-            <li>
-                <a href="#" id="logout-btn" class="logout-link">
-                    <i data-lucide="log-out"></i> <span>Logout</span>
-                </a>
-            </li>
-        </ul>
-    </div>
-</nav>
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+                    <div class="avatar">BM</div>
+                    <span class="user-name">Bid Manager</span>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
 
         <main class="main-content">
             <header class="top-bar">
@@ -71,58 +71,70 @@
                     </button>
                 </div>
 
-                <div class="upload-zone" id="upload-section">
+                <div class="upload-zone" id="upload-section" style="display: none;">
                     <div class="upload-header">
                         <i data-lucide="file-up" class="upload-icon"></i>
-                        <h3>Drop your RFP here</h3>
-                        <p>Supports PDF or DOCX</p>
+                        <h3>Tender Details</h3>
+                        <p>Provide context for the AI Analysis</p>
                     </div>
                     
-                    <div class="drop-area">
-                        <input type="file" id="file-input" hidden accept=".pdf,.docx">
-                        <button class="btn-secondary" onclick="document.getElementById('file-input').click()">
-                            Select File
-                        </button>
-                        <div id="file-list"></div>
-                    </div>
-
-                    <div id="progress-container" style="display: none;">
-                        <div class="progress-bar">
-                            <div id="progress-fill"></div>
+                    <div class="tender-form-group" style="padding: 1rem; display: flex; flex-direction: column; gap: 15px; text-align: left;">
+                        <div class="input-field">
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 5px; display: block;">Buyer Organisation</label>
+                            <input type="text" id="buyer-name" placeholder="e.g. NHS, Ministry of Defence, Apple Inc." style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid #e2e8f0;">
                         </div>
-                        <p id="status-text">Uploading...</p>
+                        
+                        <div class="input-field">
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 5px; display: block;">Submission Deadline</label>
+                            <input type="date" id="tender-deadline-input" style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        </div>
+
+                        <div class="drop-area" style="border: 2px dashed #cbd5e1; padding: 1.5rem; border-radius: 12px; text-align: center;">
+                            <input type="file" id="file-input" hidden accept=".pdf,.docx">
+                            <button class="btn-secondary" onclick="document.getElementById('file-input').click()">
+                                <i data-lucide="file-plus" style="width:16px; margin-right:8px;"></i> Select RFP Document
+                            </button>
+                            <div id="file-list" style="margin-top: 10px; font-weight: 600; color: var(--primary);"></div>
+                        </div>
+
+                        <button class="btn-hero" id="final-create-btn" onclick="handleCreateBid()" style="width: 100%; margin-top: 10px;">
+                            <i data-lucide="zap"></i> Initialize AI Analysis
+                        </button>
+                    </div>
+
+                    <div id="progress-container" style="display: none; padding: 1rem;">
+                        <div class="progress-bar">
+                            <div id="progress-fill" style="height: 100%; background: var(--primary); width: 0%; transition: width 0.3s;"></div>
+                        </div>
+                        <p id="status-text">Uploading and extracting requirements...</p>
                     </div>
                 </div>
             </section>
 
-            <section class="active-bids-list">
-                <div class="section-header">
-                    <h2>In-Progress Responses</h2>
-                    <span class="badge">Live Sync Active</span>
+            <section class="active-projects" style="margin-top: 2.5rem;">
+                <div class="section-header" style="margin-bottom: 1.5rem;">
+                    <h2 style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">Recent Projects</h2>
                 </div>
-
                 <div class="bids-grid">
-                    <p id="loading-text">Loading your bids...</p>
-
                     </div>
             </section>
-        </main>
-    </div> 
+            </main>
+    </div>
 
-<div id="confirm-modal" class="modal">
-    <div class="modal-content" style="max-width: 400px; text-align: center;">
-        <div class="modal-header" style="justify-content: center; border: none;">
-            <i data-lucide="alert-circle" style="width: 48px; height: 48px; color: var(--primary); margin-bottom: 1rem;"></i>
-        </div>
-        <h2 id="confirm-title">Are you sure?</h2>
-        <p id="confirm-message" style="color: #64748b; margin-bottom: 2rem;">This action cannot be undone easily.</p>
-        
-        <div style="display: flex; gap: 12px;">
-            <button class="btn-secondary-outline" style="flex: 1;" onclick="closeConfirmModal()">Cancel</button>
-            <button id="confirm-action-btn" class="btn-hero" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Confirm</button>
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div class="modal-header" style="justify-content: center; border: none;">
+                <i data-lucide="alert-circle" style="width: 48px; height: 48px; color: var(--primary); margin-bottom: 1rem;"></i>
+            </div>
+            <h2 id="confirm-title">Are you sure?</h2>
+            <p id="confirm-message" style="color: #64748b; margin-bottom: 2rem;">This action cannot be undone easily.</p>
+            
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-secondary-outline" style="flex: 1;" onclick="closeConfirmModal()">Cancel</button>
+                <button id="confirm-action-btn" class="btn-hero" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Confirm</button>
+            </div>
         </div>
     </div>
-</div>
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>lucide.createIcons();</script>
