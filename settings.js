@@ -24,7 +24,7 @@ export function initSettings() {
         }
 
         try {
-            // 1. Fetch User Data
+            // 1. Fetch User Data from Firestore
             const userRef = doc(db, "users", user.uid);
             const userSnap = await getDoc(userRef);
             
@@ -35,19 +35,16 @@ export function initSettings() {
 
             const userData = userSnap.data();
 
-            // 2. Security Gate
+            // 2. Security Gate: Ensure only admins access this page
             if (userData.role !== 'admin') {
                 window.location.href = 'index.html';
                 return;
             }
 
-            // 3. Update Sidebar Profile
-            const nameEl = document.getElementById('display-name');
-            const avatarEl = document.getElementById('avatar-circle');
-            if (nameEl) nameEl.textContent = user.displayName || user.email.split('@')[0];
-            if (avatarEl) avatarEl.textContent = (user.displayName || 'U').charAt(0).toUpperCase();
+            // NOTE: Sidebar Profile (Name/Avatar) is now handled globally by auth.js
+            // to prevent the "flicker" or email-prefix overwrite.
 
-            // 4. Initialize Features
+            // 3. Initialize Settings Features
             const orgId = userData.orgId || 'default-org';
             setupReviewToggle(orgId);
             loadUsers(orgId, user.uid); 
@@ -76,24 +73,23 @@ function loadUsers(orgId, currentUserUid) {
             row.style.borderBottom = "1px solid #f1f5f9";
             
             const isSelf = uDoc.id === currentUserUid;
-            const removeBtnHtml = isSelf ? '' : `<button class="remove-user-btn" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 1.2rem; margin-left: 10px;" title="Remove User">×</button>`;
 
             row.innerHTML = `
-    <td style="padding: 16px 12px; width: 40%;">
-        <div style="font-weight: 600; color: #1e293b;">${data.displayName || 'Unnamed User'}</div>
-        <div style="font-size: 0.75rem; color: #64748b;">${data.email} ${isSelf ? '(You)' : ''}</div>
-    </td>
-    <td style="padding: 16px 12px; width: 30%; text-align: left;">
-        <select class="role-changer" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 0.8rem; min-width: 110px;" ${isSelf ? 'disabled' : ''}>
-            <option value="standard" ${data.role === 'standard' ? 'selected' : ''}>STANDARD</option>
-            <option value="manager" ${data.role === 'manager' ? 'selected' : ''}>MANAGER</option>
-            <option value="admin" ${data.role === 'admin' ? 'selected' : ''}>ADMIN</option>
-        </select>
-    </td>
-    <td style="padding: 16px 12px; width: 30%; text-align: right;">
-        ${isSelf ? '' : `<button class="remove-user-btn" style="color: #dc2626; background: none; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 500;">Remove</button>`}
-    </td>
-`;
+                <td style="padding: 16px 12px; width: 40%;">
+                    <div style="font-weight: 600; color: #1e293b;">${data.displayName || 'Unnamed User'}</div>
+                    <div style="font-size: 0.75rem; color: #64748b;">${data.email} ${isSelf ? '(You)' : ''}</div>
+                </td>
+                <td style="padding: 16px 12px; width: 30%; text-align: left;">
+                    <select class="role-changer" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 0.8rem; min-width: 110px;" ${isSelf ? 'disabled' : ''}>
+                        <option value="standard" ${data.role === 'standard' ? 'selected' : ''}>STANDARD</option>
+                        <option value="manager" ${data.role === 'manager' ? 'selected' : ''}>MANAGER</option>
+                        <option value="admin" ${data.role === 'admin' ? 'selected' : ''}>ADMIN</option>
+                    </select>
+                </td>
+                <td style="padding: 16px 12px; width: 30%; text-align: right;">
+                    ${isSelf ? '' : `<button class="remove-user-btn" style="color: #dc2626; background: none; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 500;">Remove</button>`}
+                </td>
+            `;
 
             const selector = row.querySelector('.role-changer');
             if (selector) selector.onchange = (e) => updateUserRole(uDoc.id, e.target.value);
@@ -143,14 +139,14 @@ function loadPendingInvites(orgId) {
             row.style.borderBottom = "1px solid #f1f5f9";
             
             row.innerHTML = `
-    <td style="padding: 16px 12px; width: 40%; color: #1e293b; font-weight: 500;">${data.email}</td>
-    <td style="padding: 16px 12px; width: 30%; text-align: left;">
-        <span class="role-badge" style="text-transform: uppercase; font-size: 0.75rem;">${data.role}</span>
-    </td>
-    <td style="padding: 16px 12px; width: 30%; text-align: right;">
-        <button class="revoke-btn" style="color: #dc2626; background: none; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 500;">Revoke</button>
-    </td>
-`;
+                <td style="padding: 16px 12px; width: 40%; color: #1e293b; font-weight: 500;">${data.email}</td>
+                <td style="padding: 16px 12px; width: 30%; text-align: left;">
+                    <span class="role-badge" style="text-transform: uppercase; font-size: 0.75rem;">${data.role}</span>
+                </td>
+                <td style="padding: 16px 12px; width: 30%; text-align: right;">
+                    <button class="revoke-btn" style="color: #dc2626; background: none; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 500;">Revoke</button>
+                </td>
+            `;
 
             row.querySelector('.revoke-btn').onclick = async () => {
                 const confirmed = await showConfirmModal(
@@ -181,18 +177,14 @@ function showConfirmModal(title, message, confirmText = "Confirm") {
         const confirmBtn = document.getElementById('modal-confirm');
         const cancelBtn = document.getElementById('modal-cancel');
 
-        // Set content
         titleEl.textContent = title;
         bodyEl.textContent = message;
         confirmBtn.textContent = confirmText;
 
-        // Show modal
         modal.style.display = 'flex';
 
-        // Clean up and resolve
         const close = (result) => {
             modal.style.display = 'none';
-            // Important: Clear handlers so they don't stack
             confirmBtn.onclick = null;
             cancelBtn.onclick = null;
             modal.onclick = null;
@@ -204,7 +196,6 @@ function showConfirmModal(title, message, confirmText = "Confirm") {
         modal.onclick = (e) => { if(e.target === modal) close(false); };
     });
 }
-// (Keeping existing setupInviteForm, setupReviewToggle, and updateUserRole as is...)
 
 function setupInviteForm(orgId, adminEmail) {
     const inviteForm = document.getElementById('invite-form');
@@ -212,13 +203,13 @@ function setupInviteForm(orgId, adminEmail) {
 
     inviteForm.onsubmit = async (e) => {
         e.preventDefault();
-        const nameInput = document.getElementById('invite-name'); // New
+        const nameInput = document.getElementById('invite-name');
         const emailInput = document.getElementById('invite-email');
         const roleInput = document.getElementById('invite-role');
 
         try {
             await addDoc(collection(db, "invites"), {
-                name: nameInput.value.trim(), // Save Name
+                name: nameInput.value.trim(),
                 email: emailInput.value.toLowerCase().trim(),
                 role: roleInput.value,
                 orgId: orgId,

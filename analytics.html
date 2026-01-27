@@ -10,6 +10,28 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
+    // This runs INSTANTLY before the rest of the page loads
+    (function() {
+        const savedName = localStorage.getItem('userDisplayName');
+        const savedInitial = localStorage.getItem('userInitial');
+        
+        if (savedName && savedInitial) {
+            // We use a small interval just to ensure the DOM elements exist
+            const checkExist = setInterval(function() {
+                const nameEl = document.getElementById('display-name');
+                const avatarEl = document.getElementById('avatar-circle');
+                
+                if (nameEl && avatarEl) {
+                    nameEl.textContent = savedName;
+                    avatarEl.textContent = savedInitial;
+                    clearInterval(checkExist);
+                }
+            }, 5); // Checks every 5ms
+        }
+    })();
+</script>
+
+    <script>
         (function() {
             const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
             if (isCollapsed) {
@@ -39,14 +61,17 @@
 
             <div class="sidebar-footer">
                 <div class="user-profile-mini">
-                    <div class="avatar">BM</div>
-                    <span class="user-name">Bid Manager</span>
-                </div>
-                <ul class="nav-links logout-nav">
-                    <li>
-                        <a href="#" id="logout-btn" class="logout-link">
-                            <i data-lucide="log-out"></i> <span>Logout</span>
-                        </a>
+        <div class="avatar" id="avatar-circle">?</div>
+        <div class="user-info">
+            <span class="user-name" id="display-name">Loading...</span>
+            <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
+        </div>
+    </div>
+    <ul class="nav-links logout-nav">
+        <li>
+            <a href="#" id="logout-btn" class="logout-link">
+                <i data-lucide="log-out"></i> <span>Logout</span>
+            </a>
                     </li>
                 </ul>
             </div>

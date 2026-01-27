@@ -1328,3 +1328,45 @@ input:checked + .slider:before { transform: translateX(22px); }
 .role-badge.admin { background: #fee2e2; color: #991b1b; }
 .role-badge.manager { background: #fef3c7; color: #92400e; }
 .role-badge.standard { background: #f1f5f9; color: #475569; }
+
+/* --- COLLAPSED AVATAR FIX (V2) --- */
+
+/* 1. Hide name and role text when collapsed */
+html.sidebar-is-collapsed .sidebar-footer .user-info,
+.sidebar.collapsed .sidebar-footer .user-info {
+    display: none !important;
+}
+
+/* 2. Force footer to stay in a column and center its items */
+html.sidebar-is-collapsed .sidebar-footer,
+.sidebar.collapsed .sidebar-footer {
+    display: flex !important;
+    flex-direction: column !important; /* Forces logout to stay below avatar */
+    align-items: center !important;    /* Centers everything horizontally */
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    gap: 1.5rem;                       /* Adds nice spacing between avatar and logout */
+}
+
+/* 3. Center the profile mini-container */
+html.sidebar-is-collapsed .user-profile-mini,
+.sidebar.collapsed .user-profile-mini {
+    padding: 0 !important;
+    margin: 0 auto !important;
+    justify-content: center !important;
+}
+
+/* 4. Fix the Logout link alignment when collapsed */
+html.sidebar-is-collapsed .logout-nav,
+.sidebar.collapsed .logout-nav {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+html.sidebar-is-collapsed .logout-link,
+.sidebar.collapsed .logout-link {
+    justify-content: center !important;
+    padding: 0.8rem 0 !important;
+    width: 100%;
+}
