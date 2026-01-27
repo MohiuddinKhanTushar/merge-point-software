@@ -49,68 +49,73 @@
     </div>
 </nav>
 
-        <main class="main-content">
-            <header class="top-bar">
-                <div class="workspace-nav-header">
-                    <div class="title-group">
-                        <h1 id="bid-title">Loading...</h1>
-                        <span class="status-tag" id="bid-status">SYNCING</span>
-                    </div>
-                    
-                    <div class="header-actions">
-                        <button class="btn-secondary-outline" id="save-bid-btn">
-                            <i data-lucide="save"></i> Save Draft
-                        </button>
-                        <button class="btn-primary" id="submit-review-btn">
-                            <i data-lucide="send"></i> Submit for Review
-                        </button>
-                    </div>
-                </div>
-                <button class="btn-hero" id="generate-response-btn" style="display: none;">
-    <i data-lucide="sparkles"></i> Generate Response
-</button>
-<aside class="workspace-sidebar">
-    <div class="insight-card">
-        <h3><i data-lucide="list-checks"></i> Tender Sections</h3>
-        <div id="sections-list" class="sections-menu">
-            <p class="loading-text">Extracting questions...</p>
-        </div>
-    </div>
-
-    <div class="insight-card stats-card">
-        <h3><i data-lucide="bar-chart"></i> Bid Metrics</h3>
-        <p><strong>Word Count:</strong> <span id="word-count">0</span></p>
-        <p><strong>AI Confidence:</strong> <span id="confidence-level">--</span></p>
-    </div>
-</aside>
-            </header>
-
-            <div class="workspace-layout">
-                <section class="editor-container">
-                    <div class="editor-toolbar">
-                        <button><i data-lucide="bold"></i></button>
-                        <button><i data-lucide="italic"></i></button>
-                        <button><i data-lucide="list"></i></button>
-                    </div>
-                    <textarea id="ai-content-editor" placeholder="AI is generating your draft..."></textarea>
-                </section>
-
-                <aside class="workspace-sidebar">
-                    <div class="insight-card">
-                        <h3><i data-lucide="zap"></i> AI Analysis</h3>
-                        <p id="client-name"><strong>Client:</strong> ---</p>
-                        <p id="bid-deadline"><strong>Due:</strong> ---</p>
-                    </div>
-
-                    <div class="insight-card">
-                        <h3>Key Requirements</h3>
-                        <div class="requirements-list">
-                            </div>
-                    </div>
-                </aside>
+<main class="main-content">
+    <header class="top-bar">
+        <div class="workspace-nav-header">
+            <div class="title-group">
+                <h1 id="bid-title">Loading...</h1>
+                <span class="status-tag" id="bid-status">SYNCING</span>
             </div>
-        </main>
+            
+            <div class="header-actions">
+                <button class="btn-secondary-outline" id="save-bid-btn">
+                    <i data-lucide="save"></i> Save Draft
+                </button>
+                <button class="btn-primary" id="submit-review-btn">
+                    <i data-lucide="send"></i> Submit for Review
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="workspace-layout">
+        <section class="editor-container">
+    <div class="editor-toolbar">
+        <div class="text-tools">
+            <button title="Bold"><i data-lucide="bold"></i></button>
+            <button title="Italic"><i data-lucide="italic"></i></button>
+            <button title="List"><i data-lucide="list"></i></button>
+        </div>
+        
+        <button class="btn-ai-magic" id="magic-draft-btn">
+            <i data-lucide="wand-2"></i> Generate AI Draft
+        </button>
     </div>
+
+    <div id="active-question-bar" style="padding: 10px 20px; background: #f1f5f9; border-bottom: 1px solid #e5e7eb; font-size: 0.85rem; color: #475569;">
+        <strong>Editing:</strong> <span id="current-section-name">Select a section from the right...</span>
+    </div>
+
+    <textarea id="ai-content-editor" placeholder="Select a question from the right to start drafting..."></textarea>
+    
+    <div class="editor-footer">
+        <div class="stat"><i data-lucide="type"></i> <span id="word-count">0</span> words</div>
+        <div class="stat"><i data-lucide="shield-check"></i> <span id="confidence-level">--</span> confidence</div>
+    </div>
+</section>
+
+        <aside class="workspace-sidebar">
+            <div class="insight-card sections-container">
+                <h3><i data-lucide="list-checks"></i> Tender Sections</h3>
+                <div id="sections-list" class="sections-menu">
+                    <p class="loading-text">Extracting questions...</p>
+                </div>
+            </div>
+
+            <div class="insight-card">
+                <button class="btn-hero" id="generate-response-btn" style="width: 100%; margin: 0;">
+                    <i data-lucide="sparkles"></i> Re-Analyze Doc
+                </button>
+            </div>
+
+            <div class="insight-card">
+                <h3><i data-lucide="zap"></i> Key Details</h3>
+                <p id="client-name" style="font-size: 0.9rem;"><strong>Client:</strong> ---</p>
+                <p id="bid-deadline" style="font-size: 0.9rem;"><strong>Due:</strong> ---</p>
+            </div>
+        </aside>
+    </div>
+</main>
 
     <div id="review-modal" class="modal">
         <div class="modal-content">

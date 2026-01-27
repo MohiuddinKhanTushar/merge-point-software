@@ -551,7 +551,11 @@ body {
 
 .btn-outline:hover { background: #f8fafc; border-color: #2563eb; color: #2563eb; }
 
-
+.status-tag.scoping {
+    background: #eef2ff;
+    color: #4f46e5;
+    border: 1px solid #c7d2fe;
+}
 
 /* Login Page Styles */
 .auth-page {
@@ -660,10 +664,43 @@ body {
     cursor: pointer;
 }
 
+/* --- Workspace Sidebar & Sections --- */
+
+/* The outer card that holds the list */
+.sections-container {
+    display: flex;
+    flex-direction: column;
+    max-height: 400px; /* Adjust this height to fit your screen preference */
+    background: white;
+}
+
+/* The actual list that will scroll */
 .sections-menu {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    overflow-y: auto; /* This is the magic line for scrolling */
+    padding-right: 8px; /* Space for the scrollbar */
+    flex-grow: 1;
+}
+
+/* Custom Scrollbar to make it look 'SaaS-y' */
+.sections-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sections-menu::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+.sections-menu::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+.sections-menu::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 .section-item {
@@ -672,11 +709,58 @@ body {
     border-radius: 8px;
     cursor: pointer;
     border: 1px solid transparent;
-    transition: 0.2s;
+    transition: all 0.2s ease;
 }
 
-.section-item:hover { border-color: var(--primary); }
-.section-item.active { background: #eff6ff; border-color: var(--primary); }
+.section-item:hover { 
+    border-color: var(--primary); 
+    background: #ffffff;
+    transform: translateX(4px); /* Subtle 'active' feel on hover */
+}
+
+.section-item.active { 
+    background: #eff6ff; 
+    border-color: var(--primary); 
+}
+
+/* Magic AI Button Styling */
+.btn-ai-magic {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    margin-left: auto; /* Pushes button to the right of the toolbar */
+    transition: transform 0.2s;
+}
+
+.btn-ai-magic:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+}
+
+/* Editor Footer for word counts */
+.editor-footer {
+    padding: 10px 20px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    display: flex;
+    gap: 20px;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.editor-footer .stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
 
 .badge {
     font-size: 0.7rem;

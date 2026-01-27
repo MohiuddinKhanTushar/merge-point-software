@@ -1,30 +1,26 @@
 /* eslint-disable */
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { defineSecret } = require("firebase-functions/params");
 const { Pinecone } = require("@pinecone-database/pinecone");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const admin = require("firebase-admin");
+const { getFirestore } = require("firebase-admin/firestore"); // Added correct import
 
+admin.initializeApp();
 setGlobalOptions({ maxInstances: 10 });
 
+// Secrets
 const pineconeApiKey = defineSecret("PINECONE_API_KEY");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
+// --- EXISTING PINECONE TEST ---
 exports.checkPineconeConnection = onRequest(
   { secrets: [pineconeApiKey] }, 
   async (req, res) => {
     try {
-      // 1. Get the raw value and trim it to remove hidden spaces/newlines
       const rawValue = pineconeApiKey.value().trim();
-
-      if (!rawValue) {
-        throw new Error("Secret PINECONE_API_KEY is empty.");
-      }
-
-      // 2. Initialize Pinecone
-      const pc = new Pinecone({
-        apiKey: rawValue,
-      });
-
-      // 3. Test the connection
+      const pc = new Pinecone({ apiKey: rawValue });
       const indexList = await pc.listIndexes();
       
       res.status(200).send({
@@ -33,14 +29,57 @@ exports.checkPineconeConnection = onRequest(
         indexes: indexList.indexes,
       });
     } catch (error) {
-      // Log the error details to the Firebase console for debugging
       console.error("Connection Debug:", error.message);
+      res.status(500).send({ status: "error", details: error.message });
+    }
+  }
+);
+
+// --- NEW GEMINI TENDER ANALYSIS ---
+exports.analyzeTenderDocument = onCall(
+  { secrets: [geminiApiKey] }, 
+  async (request) => {
+    // 1. Auth Guard
+    if (!request.auth) {
+      throw new Error("Unauthorized: You must be logged in.");
+    }
+
+    const { bidId, documentUrl, fileName } = request.data;
+    
+    try {
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+      const prompt = `
+        You are a professional Bid Manager. I am providing you with a tender document named "${fileName}".
+        Please extract every specific question or section that requires a written response.
+        
+        Return ONLY a JSON array of objects with this structure:
+        [
+            {"question": "Text of the question", "status": "ready", "aiResponse": "", "confidence": 100},
+            {"question": "Vague question...", "status": "attention", "aiResponse": "", "confidence": 100}
+        ]
+        Set status to "attention" if the question is unclear. Do not include any text other than the JSON.
+      `;
+
+      const result = await model.generateContent([prompt, `Document Link: ${documentUrl}`]);
+      const responseText = result.response.text();
       
-      res.status(500).send({
-        status: "error",
-        message: "Pinecone rejected the key. Check if the key matches the index project.",
-        details: error.message
-      });
+      const jsonMatch = responseText.match(/\[.*\]/s);
+      const sections = JSON.parse(jsonMatch[0]);
+
+      // 2. Update the Bid in Firestore using the named "default" database
+      const db = getFirestore("default"); 
+      await db.collection("bids").doc(bidId).set({
+        sections: sections,
+        status: "scoping",
+        analysisCompletedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      return { success: true, count: sections.length };
+    } catch (error) {
+      console.error("AI Analysis Error:", error);
+      return { success: false, error: error.message };
     }
   }
 );

@@ -8,7 +8,8 @@ import {
     onSnapshot, 
     addDoc, 
     doc, 
-    getDoc, 
+    getDoc,
+    getDocs, 
     deleteDoc, 
     serverTimestamp,
     Timestamp 
@@ -131,7 +132,7 @@ function loadActiveBids(userId) {
     const bidsQuery = query(
         collection(firestore, "bids"), 
         where("ownerId", "==", userId),
-        where("status", "in", ["drafting", "review"])
+        where("status", "in", ["drafting", "review", "scoping"])
     );
 
     onSnapshot(bidsQuery, (snapshot) => {
