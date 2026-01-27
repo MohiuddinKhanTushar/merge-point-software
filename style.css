@@ -745,6 +745,23 @@ body {
     box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
 }
 
+/* Animation for the AI Draft button */
+.spin {
+    animation: rotation 2s infinite linear;
+    display: inline-block;
+}
+
+@keyframes rotation {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(359deg); }
+}
+
+.badge.status-empty {
+    background: #f1f5f9; /* Light grey */
+    color: #64748b;      /* Slate grey text */
+    border: 1px solid #e2e8f0;
+}
+
 /* Editor Footer for word counts */
 .editor-footer {
     padding: 10px 20px;
@@ -892,6 +909,43 @@ body {
 @keyframes modalSlideUp {
     from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
+}
+
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+}
+
+.toast {
+    background: #1e293b;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    animation: slideIn 0.3s ease-out forwards;
+}
+
+.toast.success { border-left: 4px solid #22c55e; }
+.toast.error { border-left: 4px solid #ef4444; }
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.toast.fade-out {
+    animation: fadeOut 0.5s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
 }
 
 /* Knowledge Base Styles */
@@ -1126,3 +1180,151 @@ body {
     width: 100% !important;
     height: auto !important;
 }
+
+/* --- HYBRID LOGIN & SSO STYLES --- */
+
+/* The 'OR' Divider */
+.auth-divider {
+    text-align: center;
+    margin: 1.5rem 0;
+    position: relative;
+}
+
+.auth-divider::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #e2e8f0;
+    z-index: 1;
+}
+
+.auth-divider span {
+    background: white;
+    padding: 0 12px;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    font-weight: 500;
+    position: relative;
+    z-index: 2;
+}
+
+/* SSO Button Container */
+.sso-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* Individual SSO Buttons */
+.btn-sso {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: white;
+    color: #334155;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-sso:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.btn-sso:active {
+    transform: translateY(0);
+}
+
+.btn-sso img {
+    width: 20px;
+    height: 20px;
+}
+
+/* Accessibility: Focus state for keyboard users */
+.btn-sso:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Settings Page Styles */
+/* Settings Specific Styles */
+.settings-grid {
+    display: grid;
+    gap: 2rem;
+}
+
+.card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid #e2e8f0;
+}
+
+/* The Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 22px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #cbd5e1;
+    transition: .3s;
+    border-radius: 34px;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px; width: 16px;
+    left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+}
+input:checked + .slider { background-color: #2563eb; }
+input:checked + .slider:before { transform: translateX(22px); }
+
+/* Table styling */
+.settings-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+.settings-table th {
+    text-align: left;
+    padding: 12px;
+    border-bottom: 2px solid #f1f5f9;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+.settings-table td {
+    padding: 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.role-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.role-badge.admin { background: #fee2e2; color: #991b1b; }
+.role-badge.manager { background: #fef3c7; color: #92400e; }
+.role-badge.standard { background: #f1f5f9; color: #475569; }

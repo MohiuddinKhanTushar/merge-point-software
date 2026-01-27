@@ -28,6 +28,26 @@
                 Sign In
             </button>
         </form>
+
+        <div class="auth-divider">
+            <span>OR</span>
+        </div>
+
+        <div class="sso-buttons">
+    <button id="google-login" class="btn-sso">
+        <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/google/google-original.svg" 
+             alt="Google" 
+             style="width: 18px; height: 18px; flex-shrink: 0;">
+        <span>Continue with Google</span>
+    </button>
+
+    <button id="microsoft-login" class="btn-sso">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" 
+             alt="Microsoft" 
+             style="width: 18px; height: 18px; flex-shrink: 0;">
+        <span>Continue with Microsoft</span>
+    </button>
+</div>
         
         <div class="auth-footer">
             <p>New to MergePoint? <a href="#">Contact Admin for access</a></p>
@@ -35,21 +55,44 @@
     </div>
 
     <script type="module">
-    import { loginUser } from './auth.js';
+        import { loginUser, loginWithGoogle, loginWithMicrosoft } from './auth.js';
 
-    const loginForm = document.getElementById('login-form');
-    
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
+        // 1. Handle Traditional Email/Password
+        const loginForm = document.getElementById('login-form');
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
 
-        try {
-            await loginUser(email, password);
-        } catch (error) {
-            alert("Invalid credentials. Please try again.");
-        }
-    });
-</script>
+            try {
+                await loginUser(email, password);
+            } catch (error) {
+                console.error(error);
+                alert("Invalid credentials. Please try again.");
+            }
+        });
+
+        // 2. Handle Google SSO
+        document.getElementById('google-login').addEventListener('click', async () => {
+            try {
+                await loginWithGoogle();
+            } catch (error) {
+                console.error("Google Login Error:", error);
+                alert("Could not sign in with Google.");
+            }
+        });
+
+        // 3. Handle Microsoft SSO
+        document.getElementById('microsoft-login').addEventListener('click', async () => {
+            try {
+                await loginWithMicrosoft();
+            } catch (error) {
+                console.error("Microsoft Login Error:", error);
+                alert("Could not sign in with Microsoft.");
+            }
+        });
+    </script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>lucide.createIcons();</script>
 </body>
 </html>

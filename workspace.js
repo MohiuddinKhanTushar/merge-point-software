@@ -1,8 +1,8 @@
 import { initSidebar } from './ui-manager.js';
 import { db, auth } from './firebase-config.js';
+// NEW: Import our custom gatekeeper
+import { checkAuthState } from './auth.js'; 
 import { doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-// 1. ADD THESE IMPORTS
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
 // Initialize Sidebar
@@ -10,12 +10,14 @@ initSidebar();
 
 const urlParams = new URLSearchParams(window.location.search);
 const bidId = urlParams.get('id');
-const functions = getFunctions(); // Initialize Functions
+const functions = getFunctions(); 
 let activeSectionIndex = null;
 let currentBidData = null;
 
-onAuthStateChanged(auth, (user) => {
+// USE OUR GATEKEEPER (This fixes the logout button and protects the page)
+checkAuthState((user) => {
     if (user && bidId) {
+        console.log("Workspace active for:", user.email);
         const docRef = doc(db, "bids", bidId);
 
         onSnapshot(docRef, (docSnap) => {
@@ -32,6 +34,7 @@ onAuthStateChanged(auth, (user) => {
                 }
 
                 renderSectionsList(data.sections || []);
+                updateGlobalProgress(data.sections || []);
 
                 if (activeSectionIndex !== null && document.activeElement !== document.getElementById('ai-content-editor')) {
                     const activeSection = data.sections[activeSectionIndex];
@@ -39,12 +42,26 @@ onAuthStateChanged(auth, (user) => {
                 }
             }
         });
-    } else if (!user) {
-        window.location.href = 'login.html';
     }
+    // Note: checkAuthState handles the "else" redirect to login.html automatically
 });
 
 // --- UI RENDERING ---
+
+function updateGlobalProgress(sections) {
+    if (!sections || sections.length === 0) return;
+    const completedCount = sections.filter(s => s.aiResponse && s.aiResponse.trim().length > 0).length;
+    const percentage = Math.round((completedCount / sections.length) * 100);
+    const bar = document.getElementById('overall-progress-bar');
+    const text = document.getElementById('progress-text');
+    if (bar && text) {
+        bar.style.width = `${percentage}%`;
+        text.innerText = `${percentage}% Done`;
+        if (percentage === 100) { bar.style.background = "#22c55e"; } 
+        else { bar.style.background = "#6366f1"; }
+    }
+}
+
 function renderSectionsList(sections) {
     const sectionsList = document.getElementById('sections-list');
     const genBtn = document.getElementById('generate-response-btn');
@@ -56,44 +73,77 @@ function renderSectionsList(sections) {
         sections.forEach((section, index) => {
             const item = document.createElement('div');
             item.className = `section-item ${activeSectionIndex === index ? 'active' : ''}`;
-            const statusClass = section.status === 'ready' ? 'status-ready' : 'status-attention';
             
+            let statusText = "EMPTY";
+            let statusClass = "status-empty";
+
+            if (section.aiResponse && section.aiResponse.trim().length > 0) {
+                statusText = "COMPLETED";
+                statusClass = "status-ready";
+            } else if (section.status === 'attention') {
+                statusText = "ATTENTION";
+                statusClass = "status-attention";
+            }
+
             item.innerHTML = `
                 <div class="section-info">
-                    <span class="badge ${statusClass}">${section.status.toUpperCase()}</span>
+                    <span class="badge ${statusClass}">${statusText}</span>
                     <p class="section-q">${section.question.substring(0, 60)}...</p>
                 </div>
             `;
 
             item.onclick = () => {
                 activeSectionIndex = index;
-                
-                // 1. Update UI Selection
                 document.querySelectorAll('.section-item').forEach(el => el.classList.remove('active'));
                 item.classList.add('active');
-                
-                // 2. Fill the Grey Context Bar
                 document.getElementById('current-section-name').innerText = section.question;
-                
-                // 3. Populate Editor & Stats
                 const editor = document.getElementById('ai-content-editor');
                 const content = section.aiResponse || "";
                 editor.value = content;
-                
-                // Ensure placeholder is clear if we are editing
                 editor.placeholder = "AI hasn't drafted this yet. Click 'Generate AI Draft' above to start.";
-                
                 updateMetrics(content, section.confidence);
-                
-                // 4. Update Icons (Lucide needs to re-run for dynamic content)
                 if (window.lucide) lucide.createIcons();
-
-                // TRIGGER THE DRAFTING LOGIC
-                showDraftingInterface(section.question);
+                setupMagicButton(section.question);
             };
             sectionsList.appendChild(item);
         });
     }
+}
+
+function setupMagicButton(questionText) {
+    const magicBtn = document.getElementById('magic-draft-btn');
+    const newBtn = magicBtn.cloneNode(true);
+    magicBtn.parentNode.replaceChild(newBtn, magicBtn);
+
+    newBtn.onclick = async () => {
+        const editor = document.getElementById('ai-content-editor');
+        const originalBtnHTML = newBtn.innerHTML;
+        newBtn.disabled = true;
+        newBtn.innerHTML = `<i data-lucide="sparkles" class="spin"></i> Drafting...`;
+        if (window.lucide) lucide.createIcons();
+        editor.value = "Gemini is drafting a professional response...";
+
+        try {
+            const generateDraft = httpsCallable(functions, 'generateSectionDraft');
+            const result = await generateDraft({ 
+                question: questionText,
+                bidId: bidId 
+            });
+
+            if (result.data.success) {
+                editor.value = result.data.answer;
+                currentBidData.sections[activeSectionIndex].aiResponse = result.data.answer;
+                updateMetrics(result.data.answer, result.data.confidence || 85);
+            } else { throw new Error(result.data.error); }
+        } catch (e) {
+            console.error("Drafting failed", e);
+            editor.value = "Error: " + e.message;
+        } finally {
+            newBtn.disabled = false;
+            newBtn.innerHTML = originalBtnHTML;
+            if (window.lucide) lucide.createIcons();
+        }
+    };
 }
 
 function updateMetrics(text, confidence) {
@@ -104,7 +154,6 @@ function updateMetrics(text, confidence) {
 
 // --- ACTION HANDLERS ---
 
-// REAL AI GENERATION (Calls Cloud Function)
 document.getElementById('generate-response-btn').addEventListener('click', async () => {
     const btn = document.getElementById('generate-response-btn');
     const originalText = btn.innerHTML;
@@ -118,12 +167,8 @@ document.getElementById('generate-response-btn').addEventListener('click', async
             documentUrl: currentBidData.pdfUrl || "", 
             fileName: currentBidData.bidName
         });
-
-        if (result.data.success) {
-            alert(`Success! AI found ${result.data.count} sections.`);
-        } else {
-            alert("AI Analysis failed: " + result.data.error);
-        }
+        if (result.data.success) { alert(`Success! AI found ${result.data.count} sections.`); } 
+        else { alert("AI Analysis failed: " + result.data.error); }
     } catch (e) {
         console.error("Call failed", e);
         alert("Error connecting to AI service.");
@@ -134,57 +179,30 @@ document.getElementById('generate-response-btn').addEventListener('click', async
     }
 });
 
-// Save Logic
 document.getElementById('save-bid-btn').addEventListener('click', async () => {
     if (activeSectionIndex === null) return alert("Select a section first.");
     const content = document.getElementById('ai-content-editor').value;
     const updatedSections = [...currentBidData.sections];
     updatedSections[activeSectionIndex].aiResponse = content;
-    
     try {
         await updateDoc(doc(db, "bids", bidId), { sections: updatedSections });
-        alert("Saved!");
-    } catch (e) {
-        alert("Error saving: " + e.message);
-    }
+        updateGlobalProgress(updatedSections);
+        showToast("Draft saved successfully!");
+    } catch (e) { alert("Error saving: " + e.message); }
 });
 
-function showDraftingInterface(questionText) {
-    const magicBtn = document.getElementById('magic-draft-btn');
-    
-    // Reset the button state
-    magicBtn.onclick = async () => {
-        const editor = document.getElementById('ai-content-editor');
-        const originalBtnText = magicBtn.innerHTML;
-        
-        // UI Loading State
-        magicBtn.disabled = true;
-        magicBtn.innerHTML = `<i class="spinner"></i> Drafting...`;
-        editor.value = "AI is generating your draft...";
-
-        try {
-            // This calls your 'generateSectionDraft' Cloud Function
-            const generateDraft = httpsCallable(functions, 'generateSectionDraft');
-            const result = await generateDraft({ 
-                question: questionText,
-                bidId: bidId 
-            });
-
-            if (result.data.success) {
-                editor.value = result.data.answer;
-                // Update the local data so 'Save' works correctly
-                currentBidData.sections[activeSectionIndex].aiResponse = result.data.answer;
-                updateMetrics(result.data.answer, 95); // Assuming 95% confidence for now
-            }
-        } catch (e) {
-            console.error("Drafting failed", e);
-            editor.value = "Error generating draft. Please try again.";
-        } finally {
-            magicBtn.disabled = false;
-            magicBtn.innerHTML = originalBtnText;
-            if (window.lucide) lucide.createIcons();
-        }
-    };
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icon = type === 'success' ? 'check-circle' : 'alert-circle';
+    toast.innerHTML = `<i data-lucide="${icon}"></i><span>${message}</span>`;
+    container.appendChild(toast);
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 500);
+    }, 3000);
 }
 
 const modal = document.getElementById('review-modal');

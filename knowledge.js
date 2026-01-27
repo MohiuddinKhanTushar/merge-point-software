@@ -1,5 +1,7 @@
 import { initSidebar } from './ui-manager.js';
-import { storage, db, auth } from './firebase-config.js'; 
+import { storage, db } from './firebase-config.js'; 
+// NEW: Import our gatekeeper
+import { checkAuthState } from './auth.js'; 
 import { ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { 
     collection, 
@@ -8,7 +10,6 @@ import {
     query, 
     where, 
     getDocs, 
-    orderBy, 
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -24,13 +25,13 @@ const statusText = document.getElementById('knowledge-status-text');
 const uploadTrigger = document.getElementById('knowledge-upload-trigger');
 const uploadSection = document.getElementById('knowledge-upload-section');
 
-// 2. Auth Guard
-auth.onAuthStateChanged((user) => {
+// 2. Auth Guard & Initialization
+// This protects the page and wires up the Logout button automatically
+checkAuthState((user) => {
     if (user) {
+        console.log("Knowledge Base active for:", user.email);
         loadLibrary(user.uid);
         setupUpload(user.uid);
-    } else {
-        window.location.href = 'login.html';
     }
 });
 
@@ -42,11 +43,12 @@ if (uploadTrigger && uploadSection) {
     });
 }
 
-// 4. Handle Upload Logic with Versioning (Workflow Step 2B)
+// 4. Handle Upload Logic with Versioning
 function setupUpload(userId) {
     if (!fileInput) return;
 
-    fileInput.addEventListener('change', async (e) => {
+    // Use a fresh listener to prevent multiple triggers
+    fileInput.onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
@@ -54,7 +56,7 @@ function setupUpload(userId) {
         statusText.innerText = "Checking document versions...";
 
         try {
-            // 4a. Versioning Logic: Check how many times this filename exists for this user
+            // 4a. Versioning Logic
             const q = query(
                 collection(db, "knowledge"), 
                 where("ownerId", "==", userId),
@@ -65,7 +67,7 @@ function setupUpload(userId) {
 
             statusText.innerText = `Uploading Version ${nextVersion}...`;
 
-            // 4b. Storage Upload (Path includes version to prevent overwriting)
+            // 4b. Storage Upload
             const storageRef = ref(storage, `knowledge/${userId}/v${nextVersion}_${file.name}`);
             const uploadTask = uploadBytesResumable(storageRef, file);
 
@@ -81,10 +83,10 @@ function setupUpload(userId) {
                 async () => {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-                    // 4c. Firestore Record (Step 2B: status set to 'processing')
+                    // 4c. Firestore Record
                     await addDoc(collection(db, "knowledge"), {
                         ownerId: userId,
-                        orgId: "default-org", // Prepared for future Org boundary logic
+                        orgId: "default-org", 
                         fileName: file.name,
                         fileUrl: downloadURL,
                         version: nextVersion,
@@ -104,18 +106,16 @@ function setupUpload(userId) {
         } catch (error) {
             console.error("Setup error:", error);
         }
-    });
+    };
 }
 
-// 5. Load Library with Status Indicators
+// 5. Load Library
 function loadLibrary(userId) {
     if (!libraryGrid) return;
 
-    // Use a simple query first to ensure data displays
     const q = query(collection(db, "knowledge"), where("ownerId", "==", userId));
 
     onSnapshot(q, (snapshot) => {
-        // Clear "Loading Library..." immediately
         libraryGrid.innerHTML = ''; 
 
         if (snapshot.empty) {
@@ -128,7 +128,6 @@ function loadLibrary(userId) {
 
         snapshot.forEach((doc) => {
             const data = doc.data();
-            // Fallback for date if it's missing
             const dateStr = data.uploadedAt?.toDate ? data.uploadedAt.toDate().toLocaleDateString() : 'New Document';
             
             const cardHtml = `

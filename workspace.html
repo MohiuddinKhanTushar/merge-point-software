@@ -31,7 +31,7 @@
         <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
         <li><a href="#"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
-        <li><a href="#"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+        <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
     </ul>
 
     <div class="sidebar-footer">
@@ -55,6 +55,11 @@
             <div class="title-group">
                 <h1 id="bid-title">Loading...</h1>
                 <span class="status-tag" id="bid-status">SYNCING</span>
+
+                <div class="progress-container" style="width: 200px; height: 8px; background: #e2e8f0; border-radius: 10px; margin-left: 1.5rem; position: relative; overflow: hidden;">
+        <div id="overall-progress-bar" style="width: 0%; height: 100%; background: #6366f1; transition: width 0.4s ease;"></div>
+    </div>
+    <span id="progress-text" style="font-size: 0.75rem; color: #64748b; margin-left: 8px; font-weight: 600;">0%</span>
             </div>
             
             <div class="header-actions">
@@ -128,6 +133,8 @@
             </div>
         </div>
     </div>
+
+    <div id="toast-container" class="toast-container"></div>
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>lucide.createIcons();</script>
