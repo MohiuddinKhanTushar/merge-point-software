@@ -14,6 +14,8 @@ import {
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+initSidebar();
+
 let allArchiveData = []; // Local cache for searching/filtering
 let currentProjectId = null; // Track which project is open in the modal
 
