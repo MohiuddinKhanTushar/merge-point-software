@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const { getFirestore } = require("firebase-admin/firestore");
 
 const { onObjectFinalized } = require("firebase-functions/v2/storage");
+const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const path = require("path");
 const fs = require("fs");
 
@@ -18,7 +19,7 @@ setGlobalOptions({ maxInstances: 10 });
 const pineconeApiKey = defineSecret("PINECONE_API_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// --- EXISTING PINECONE TEST ---
+// --- PINECONE CONNECTION TEST ---
 exports.checkPineconeConnection = onRequest(
   { secrets: [pineconeApiKey] }, 
   async (req, res) => {
@@ -39,7 +40,7 @@ exports.checkPineconeConnection = onRequest(
   }
 );
 
-// --- NEW GEMINI TENDER ANALYSIS ---
+// --- GEMINI TENDER ANALYSIS ---
 exports.analyzeTenderDocument = onCall(
   { secrets: [geminiApiKey] }, 
   async (request) => {
@@ -86,7 +87,7 @@ exports.analyzeTenderDocument = onCall(
   }
 );
 
-// --- UPDATED RAG-ENABLED SECTION DRAFTER ---
+// --- RAG-ENABLED SECTION DRAFTER ---
 exports.generateSectionDraft = onCall(
   { secrets: [geminiApiKey, pineconeApiKey] }, 
   async (request) => {
@@ -102,40 +103,32 @@ exports.generateSectionDraft = onCall(
       const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-      // 1. Convert question to vector
       const queryEmbedding = await embeddingModel.embedContent(question);
       
-      // 2. Query Pinecone for the top 3 relevant chunks
       const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
       const index = pc.index("mergepoint-index");
 
       const queryResponse = await index.query({
-        vector: queryEmbedding.embedding.values,
+        vector: queryEmbedding.embedding.values.slice(0, 768),
         topK: 3,
-        filter: { ownerId: { "$eq": userId } },
+        filter: { ownerId: userId },
         includeMetadata: true
       });
 
-      // Combine relevant chunks into context
       const contextText = queryResponse.matches
         .map(match => match.metadata.text)
         .join("\n\n---\n\n");
 
-      console.log(`RAG: Found ${queryResponse.matches.length} chunks for question: ${question.substring(0, 50)}...`);
-
-      // 3. Draft the response with the found context
       const prompt = `
         You are an expert Bid Writer. Draft a professional response to the tender question below using the provided COMPANY CONTEXT.
         
         QUESTION: "${question}"
         
         COMPANY CONTEXT:
-        ${contextText || "No specific company documents found. Use professional best practices and general knowledge."}
+        ${contextText || "No specific company documents found."}
         
         INSTRUCTIONS:
         - Use a professional, persuasive, and confident tone.
-        - Incorporate specific details from the COMPANY CONTEXT where relevant.
-        - If the context doesn't fully answer the question, provide a high-quality template.
         - Return ONLY the text of the drafted response.
       `;
 
@@ -156,17 +149,12 @@ exports.generateSectionDraft = onCall(
   }
 );
 
-// --- KNOWLEDGE BASE SYNC (MODERN VERSION) ---
+// --- KNOWLEDGE BASE SYNC (UPLOAD) ---
 exports.processMasterDocument = onObjectFinalized(
   { region: "us-east1", secrets: [geminiApiKey, pineconeApiKey], timeoutSeconds: 300, memory: "1GiB" },
   async (event) => {
     const filePath = event.data.name; 
-    console.log(`RAW FILE PATH DETECTED: "${filePath}"`);
-
-    if (!filePath.toLowerCase().includes("knowledge/") || !filePath.toLowerCase().endsWith(".pdf")) {
-      console.log("SKIP: File does not meet Knowledge Base criteria.");
-      return;
-    }
+    if (!filePath.toLowerCase().includes("knowledge/") || !filePath.toLowerCase().endsWith(".pdf")) return;
 
     const bucket = admin.storage().bucket(event.data.bucket);
     const pathParts = filePath.split("/");
@@ -178,70 +166,108 @@ exports.processMasterDocument = onObjectFinalized(
       await bucket.file(filePath).download({ destination: tempFilePath });
       const dataBuffer = fs.readFileSync(tempFilePath);
 
-      // --- MODERN PDF PARSING (pdf2json) ---
       const PDFParser = require("pdf2json");
       const pdfParser = new PDFParser(null, 1); 
-
       const fullText = await new Promise((resolve, reject) => {
-        pdfParser.on("pdfParser_dataError", errData => reject(new Error(errData.parserError)));
-        pdfParser.on("pdfParser_dataReady", () => {
-          const text = pdfParser.getRawTextContent();
-          resolve(text);
-        });
+        pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
         pdfParser.parseBuffer(dataBuffer);
       });
 
-      console.log(`PDF parsed successfully. Text length: ${fullText.length} characters.`);
-
-      if (!fullText || fullText.length < 10) {
-        throw new Error("PDF extraction yielded no usable text.");
-      }
-
-      // 3. Chunking
       const chunks = fullText.match(/[\s\S]{1,1000}/g) || [];
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
       const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
       const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
       const index = pc.index("mergepoint-index");
 
-      console.log(`Generating embeddings for ${chunks.length} chunks...`);
-
       const vectors = await Promise.all(chunks.map(async (chunk, i) => {
         const result = await embeddingModel.embedContent(chunk);
         return {
           id: `${userId}_${Date.now()}_${i}`,
-          values: result.embedding.values,
+          values: result.embedding.values.slice(0, 768),
           metadata: { text: chunk, ownerId: userId, source: fileName }
         };
       }));
 
       await index.upsert(vectors);
-      console.log("Pinecone upsert successful.");
 
-      // --- ROBUST FIRESTORE UPDATE ---
       const db = getFirestore("default");
-      const knowledgeRef = db.collection("knowledge");
-      
-      const snap = await knowledgeRef
-        .where("ownerId", "==", userId)
-        .get();
-
-      const docToUpdate = snap.docs.find(doc => {
-        const dbFileName = doc.data().fileName;
-        return fileName.includes(dbFileName) || dbFileName.includes(fileName);
-      });
+      const snap = await db.collection("knowledge").where("ownerId", "==", userId).get();
+      const docToUpdate = snap.docs.find(doc => fileName.includes(doc.data().fileName));
 
       if (docToUpdate) {
         await docToUpdate.ref.update({ status: "ready" });
-        console.log(`Firestore status updated to 'ready' for doc ID: ${docToUpdate.id}`);
-      } else {
-        console.warn(`Could not find Firestore doc for user ${userId} and file ${fileName}`);
       }
 
       if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-
     } catch (error) {
       console.error("CRITICAL ERROR in processMasterDocument:", error.message);
     }
   }
 );
+
+// --- KNOWLEDGE BASE DELETE SYNC (STORAGE + PINECONE) ---
+exports.cleanupKnowledgeBase = onDocumentDeleted({
+  document: "knowledge/{docId}",
+  database: "default",      
+  region: "europe-west2",   
+  secrets: [pineconeApiKey] 
+}, async (event) => {
+  console.log("!!! TRIGGER ACTIVATED !!! Doc ID:", event.params.docId);
+
+  const snapshot = event.data;
+  if (!snapshot) return;
+
+  const data = snapshot.data();
+  const fileName = data?.fileName;
+  const userId = data?.ownerId;
+
+  if (!fileName || !userId) return;
+
+  try {
+    // --- STEP 1: DELETE FROM STORAGE ---
+    const bucket = admin.storage().bucket();
+    // We try both paths because some uploads use the v1_ prefix
+    const possiblePaths = [
+      `knowledge/${userId}/${fileName}`,
+      `knowledge/${userId}/v1_${fileName}`
+    ];
+
+    for (const storagePath of possiblePaths) {
+      const file = bucket.file(storagePath);
+      const [exists] = await file.exists();
+      if (exists) {
+        console.log(`Deleting file from Storage: ${storagePath}`);
+        await file.delete();
+      }
+    }
+
+    // --- STEP 2: DELETE FROM PINECONE ---
+    const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
+    const index = pc.index("mergepoint-index");
+
+    console.log(`Step 2: Fetching IDs for ${fileName} (User: ${userId})...`);
+
+    const queryResponse = await index.query({
+      vector: Array(768).fill(0), 
+      filter: {
+        ownerId: userId,
+        source: { "$in": [fileName, `v1_${fileName}`] }
+      },
+      topK: 1000,
+      includeMetadata: false
+    });
+
+    const idsToDelete = queryResponse.matches.map(m => m.id);
+
+    if (idsToDelete.length > 0) {
+      console.log(`Step 3: Deleting ${idsToDelete.length} vectors...`);
+      await index.deleteMany(idsToDelete);
+      console.log(`SUCCESS: Storage and Pinecone cleared.`);
+    } else {
+      console.log("Storage checked, but no matching vectors found in Pinecone.");
+    }
+
+  } catch (error) {
+    console.error("CLEANUP ERROR:", error.message);
+  }
+});
