@@ -961,6 +961,13 @@ body {
     animation: slideDown 0.3s ease-out;
 }
 
+.delete-btn:hover {
+    background-color: #ff4d4d !important;
+    color: white !important;
+    border-color: #ff4d4d !important;
+    transition: all 0.2s ease;
+}
+
 @keyframes slideDown {
     from {
         opacity: 0;

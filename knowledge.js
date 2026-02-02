@@ -10,7 +10,9 @@ import {
     query, 
     where, 
     getDocs, 
-    serverTimestamp 
+    serverTimestamp,
+    doc,
+    deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // Initialize Sidebar
@@ -126,12 +128,13 @@ function loadLibrary(userId) {
             return;
         }
 
-        snapshot.forEach((doc) => {
-            const data = doc.data();
+        snapshot.forEach((snapshotDoc) => {
+            const data = snapshotDoc.data();
+            const docId = snapshotDoc.id; // Get the Firestore ID
             const dateStr = data.uploadedAt?.toDate ? data.uploadedAt.toDate().toLocaleDateString() : 'New Document';
             
             const cardHtml = `
-                <div class="bid-card">
+                <div class="bid-card" id="card-${docId}">
                     <div class="bid-status-row">
                         <span class="status-tag won">v${data.version || 1} ${data.status || 'READY'}</span>
                         <span class="deadline">${dateStr}</span>
@@ -140,13 +143,33 @@ function loadLibrary(userId) {
                         <h3>${data.fileName}</h3>
                         <p class="client-name">Master Reference</p>
                     </div>
-                    <div class="bid-footer" style="margin-top: 1.5rem;">
-                        <button class="btn-outline" style="width: 100%;" onclick="window.open('${data.fileUrl}', '_blank')">
+                    <div class="bid-footer" style="margin-top: 1.5rem; display: flex; gap: 0.5rem;">
+                        <button class="btn-outline" style="flex: 3;" onclick="window.open('${data.fileUrl}', '_blank')">
                             View Document
+                        </button>
+                        <button class="btn-outline delete-btn" style="flex: 1; border-color: #ff4d4d; color: #ff4d4d;" data-id="${docId}">
+                            <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
                         </button>
                     </div>
                 </div>`;
             libraryGrid.insertAdjacentHTML('beforeend', cardHtml);
+        });
+
+        // Attach listeners to all delete buttons
+        document.querySelectorAll('.delete-btn').forEach(button => {
+            button.onclick = async (e) => {
+                const id = e.currentTarget.getAttribute('data-id');
+                if (confirm("Are you sure you want to delete this master document? This will remove all AI context associated with it.")) {
+                    try {
+                        // This single line triggers your backend Cloud Function fix!
+                        await deleteDoc(doc(db, "knowledge", id));
+                        console.log("Firestore doc deleted, triggering backend cleanup...");
+                    } catch (err) {
+                        console.error("Error deleting document:", err);
+                        alert("Failed to delete document.");
+                    }
+                }
+            };
         });
 
         if (window.lucide) lucide.createIcons({ root: libraryGrid });
