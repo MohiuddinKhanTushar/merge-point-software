@@ -1,6 +1,6 @@
 import { initSidebar } from './ui-manager.js';
-import { db, auth } from './firebase-config.js';
-// NEW: Import our custom gatekeeper
+// FIXED: Added 'app' to the imports below
+import { db, auth, app } from './firebase-config.js';
 import { checkAuthState } from './auth.js'; 
 import { doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
@@ -10,11 +10,14 @@ initSidebar();
 
 const urlParams = new URLSearchParams(window.location.search);
 const bidId = urlParams.get('id');
-const functions = getFunctions(); 
+
+// This now works because 'app' is defined
+const functions = getFunctions(app, "us-east1"); 
+
 let activeSectionIndex = null;
 let currentBidData = null;
 
-// USE OUR GATEKEEPER (This fixes the logout button and protects the page)
+// USE OUR GATEKEEPER
 checkAuthState((user) => {
     if (user && bidId) {
         console.log("Workspace active for:", user.email);
@@ -43,7 +46,6 @@ checkAuthState((user) => {
             }
         });
     }
-    // Note: checkAuthState handles the "else" redirect to login.html automatically
 });
 
 // --- UI RENDERING ---
@@ -165,10 +167,14 @@ document.getElementById('generate-response-btn').addEventListener('click', async
         const result = await analyzeTender({ 
             bidId: bidId,
             documentUrl: currentBidData.pdfUrl || "", 
-            fileName: currentBidData.bidName
+            fileName: currentBidData.fileName 
         });
-        if (result.data.success) { alert(`Success! AI found ${result.data.count} sections.`); } 
-        else { alert("AI Analysis failed: " + result.data.error); }
+        
+        if (result.data.success) { 
+            showToast(`Success! AI found ${result.data.count} sections.`); 
+        } else { 
+            alert("AI Analysis failed: " + result.data.error); 
+        }
     } catch (e) {
         console.error("Call failed", e);
         alert("Error connecting to AI service.");
@@ -206,5 +212,7 @@ function showToast(message, type = 'success') {
 }
 
 const modal = document.getElementById('review-modal');
-document.getElementById('submit-review-btn').onclick = () => modal.style.display = 'block';
+if (document.getElementById('submit-review-btn')) {
+    document.getElementById('submit-review-btn').onclick = () => modal.style.display = 'block';
+}
 window.closeModal = () => modal.style.display = 'none';

@@ -15,20 +15,31 @@ import {
     Timestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Start the sidebar logic
-initSidebar();
+// --- STORAGE & FUNCTIONS IMPORTS ---
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
-const firestore = db; 
+// Initialize Sidebar and Services
+initSidebar();
+const firestore = db;
+const storage = getStorage(app);
+
+// CRITICAL: Set region to us-east1 to match backend deployment
+const functions = getFunctions(app, "us-east1"); 
+
 let selectedFile = null; 
 
 // Protect the page
 checkAuthState((user) => {
     console.log("Welcome, user:", user.uid);
-    loadActiveBids(user.uid);
+    if (document.querySelector('.bids-grid')) {
+        loadActiveBids(user.uid);
+    }
 });
 
 // Hook up Logout
-document.getElementById('logout-btn').addEventListener('click', logoutUser);
+const logoutBtn = document.getElementById('logout-btn');
+if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
 
 // 1. Handle File Selection UI
 const fileInput = document.getElementById('file-input');
@@ -57,41 +68,72 @@ async function handleCreateBid() {
     const progressContainer = document.getElementById('progress-container');
     const statusText = document.getElementById('status-text');
     if (progressContainer) progressContainer.style.display = 'block';
-    if (statusText) statusText.innerText = "Initializing AI Analysis...";
 
     try {
+        // STEP A: Verify Knowledge Base
+        if (statusText) statusText.innerText = "Verifying Knowledge Base...";
+        const hasMasterDoc = await checkMasterDocument(user.uid);
+        if (!hasMasterDoc) {
+            alert("Action Required: Please upload your Company Master Document in the Knowledge Base first.");
+            window.location.href = 'knowledge.html';
+            return;
+        }
+
+        // STEP B: Generate unique filename and upload
+        if (statusText) statusText.innerText = "Uploading tender document...";
+        
+        // Create the unique name here so it matches between Storage, Firestore, and the AI call
+        const uniqueFileName = `${Date.now()}_${selectedFile.name}`;
+        const storagePath = `tenders/${user.uid}/${uniqueFileName}`;
+        const fileRef = ref(storage, storagePath);
+        
+        const uploadResult = await uploadBytes(fileRef, selectedFile);
+        const downloadUrl = await getDownloadURL(uploadResult.ref);
+
+        // STEP C: Create Firestore Record
+        if (statusText) statusText.innerText = "Initializing project...";
         const deadlineDate = deadlineValue ? Timestamp.fromDate(new Date(deadlineValue)) : serverTimestamp();
 
-        await addDoc(collection(firestore, "bids"), {
+        const bidDoc = await addDoc(collection(firestore, "bids"), {
             bidName: selectedFile.name.split('.')[0], 
             client: buyerName,
             deadline: deadlineDate, 
-            status: "drafting",
+            status: "scoping",
             progress: 10, 
             ownerId: user.uid,
             createdAt: serverTimestamp(),
-            fileName: selectedFile.name
+            fileName: uniqueFileName, // Store the unique name (with timestamp)
+            pdfUrl: downloadUrl 
         });
 
-        if (statusText) statusText.innerText = "Project Created!";
-        setTimeout(() => {
-            resetUploadForm();
-            toggleUpload();
-        }, 1000);
+        // STEP D: Trigger AI Analysis
+        if (statusText) statusText.innerText = "AI is extracting mandatory questions...";
+        const analyzeTender = httpsCallable(functions, 'analyzeTenderDocument');
+        
+        const result = await analyzeTender({ 
+            bidId: bidDoc.id,
+            documentUrl: downloadUrl, 
+            fileName: uniqueFileName // Pass the unique name to the AI
+        });
+
+        if (result.data.success) {
+            if (statusText) statusText.innerText = "Analysis Complete! Opening Workspace...";
+            setTimeout(() => {
+                window.location.href = `workspace.html?id=${bidDoc.id}`;
+            }, 1000);
+        } else {
+            throw new Error(result.data.error || "AI Analysis failed.");
+        }
 
     } catch (e) { 
-        console.error("Error adding document: ", e); 
-    }
-
-    const hasMasterDoc = await checkMasterDocument(user.uid);
-    if (!hasMasterDoc) {
-        alert("Action Required: Please upload your Company Master Document in the Knowledge Base before creating an RFP response.");
-        window.location.href = 'knowledge.html';
-        return;
+        console.error("Error creating bid: ", e); 
+        alert("Failed to create bid: " + e.message);
+        if (progressContainer) progressContainer.style.display = 'none';
     }
 }
 window.handleCreateBid = handleCreateBid;
 
+// 3. UI Helpers
 function resetUploadForm() {
     selectedFile = null;
     if (document.getElementById('file-input')) document.getElementById('file-input').value = "";
@@ -119,15 +161,10 @@ function toggleUpload() {
 }
 window.toggleUpload = toggleUpload;
 
-// 3. Load Active Bids - FIXED VERSION
+// 4. Load Active Bids
 function loadActiveBids(userId) {
     const bidsGrid = document.querySelector('.bids-grid');
-    
-    // Safety check: If the grid doesn't exist, stop here to avoid the crash
-    if (!bidsGrid) {
-        console.error("Critical Error: .bids-grid not found in HTML. Check index.html for <div class='bids-grid'></div>");
-        return;
-    }
+    if (!bidsGrid) return;
 
     const bidsQuery = query(
         collection(firestore, "bids"), 
@@ -142,7 +179,6 @@ function loadActiveBids(userId) {
         }
 
         let combinedHtml = "";
-
         snapshot.forEach((doc) => {
             const bid = doc.data();
             const bidId = doc.id;
@@ -182,16 +218,23 @@ function loadActiveBids(userId) {
             `;
         });
 
-        // Simplified way to update the HTML to avoid reference errors
         bidsGrid.innerHTML = combinedHtml;
-
-        if (window.lucide) {
-            lucide.createIcons({ root: bidsGrid });
-        }
+        if (window.lucide) lucide.createIcons({ root: bidsGrid });
     });
 }
 
-// 4. Archive Logic
+// 5. Knowledge Check
+async function checkMasterDocument(userId) {
+    const q = query(
+        collection(db, "knowledge"), 
+        where("ownerId", "==", userId),
+        where("status", "in", ["ready", "processing"])
+    );
+    const snap = await getDocs(q);
+    return !snap.empty; 
+}
+
+// 6. Archive and Modal logic
 async function archiveBid(bidId) {
     window.showCustomConfirm(
         "Archive Project?", 
@@ -202,51 +245,28 @@ async function archiveBid(bidId) {
                 const bidSnap = await getDoc(bidRef);
 
                 if (bidSnap.exists()) {
-                    const bidData = bidSnap.data();
                     await addDoc(collection(firestore, "archived_rfps"), {
-                        ...bidData,
-                        dateArchived: serverTimestamp(),
-                        summary: `Archived on ${new Date().toLocaleDateString()}`
+                        ...bidSnap.data(),
+                        dateArchived: serverTimestamp()
                     });
                     await deleteDoc(bidRef);
                 }
-            } catch (error) {
-                console.error("Archive error:", error);
-            }
+            } catch (error) { console.error("Archive error:", error); }
         }
     );
 }
 window.archiveBid = archiveBid;
 
-async function checkMasterDocument(userId) {
-    const q = query(
-        collection(db, "knowledge"), 
-        where("ownerId", "==", userId),
-        where("status", "==", "processing") // or "ready" if you update it later
-    );
-    const snap = await getDocs(q);
-    return !snap.empty; // Returns true if a document exists
-}
-
-// 5. Custom Confirmation Modal
 window.showCustomConfirm = (title, message, onConfirm) => {
     const modal = document.getElementById('confirm-modal');
     if (!modal) return;
-    
     document.getElementById('confirm-title').innerText = title;
     document.getElementById('confirm-message').innerText = message;
-    
     const actionBtn = document.getElementById('confirm-action-btn');
     const newActionBtn = actionBtn.cloneNode(true);
     actionBtn.parentNode.replaceChild(newActionBtn, actionBtn);
-    
-    newActionBtn.addEventListener('click', () => {
-        onConfirm();
-        closeConfirmModal();
-    });
-
+    newActionBtn.addEventListener('click', () => { onConfirm(); closeConfirmModal(); });
     modal.style.display = 'flex';
-    if (window.lucide) lucide.createIcons({ root: modal });
 };
 
 window.closeConfirmModal = () => {
