@@ -5,7 +5,9 @@ const { defineSecret } = require("firebase-functions/params");
 const { Pinecone } = require("@pinecone-database/pinecone");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const admin = require("firebase-admin");
-const { getFirestore } = require("firebase-admin/firestore");
+
+// --- CRITICAL FIX: Use initializeFirestore to target specific DB IDs ---
+const { initializeFirestore, getFirestore } = require("firebase-admin/firestore");
 
 const { onObjectFinalized } = require("firebase-functions/v2/storage");
 const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
@@ -13,8 +15,21 @@ const path = require("path");
 const fs = require("fs");
 
 admin.initializeApp();
-setGlobalOptions({ maxInstances: 10 });
 
+// Explicitly set global region to us-east1 to align with your storage/pinecone
+setGlobalOptions({ 
+    region: "us-east1",
+    maxInstances: 10 
+});
+
+/** * This helper is the most important part. 
+ * It forces the SDK to use the database named 'default' in Europe 
+ * instead of the system's root '(default)' in the US.
+ */
+
+const getDb = () => {
+  return getFirestore('default');
+};
 // Secrets
 const pineconeApiKey = defineSecret("PINECONE_API_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
@@ -42,47 +57,53 @@ exports.checkPineconeConnection = onRequest(
 
 // --- GEMINI TENDER ANALYSIS ---
 exports.analyzeTenderDocument = onCall(
-  { secrets: [geminiApiKey] }, 
+  { secrets: [geminiApiKey], timeoutSeconds: 540, memory: "2GiB" }, 
   async (request) => {
-    if (!request.auth) {
-      throw new Error("Unauthorized: You must be logged in.");
-    }
+    console.log("--- STARTING ANALYSIS ---");
+    const { bidId, fileName } = request.data;
+    const tempFilePath = path.join("/tmp", `tender_${Date.now()}.pdf`);
 
-    const { bidId, documentUrl, fileName } = request.data;
-    
     try {
+      const bucket = admin.storage().bucket();
+      const storagePath = `tenders/${request.auth.uid}/${fileName}`;
+      
+      console.log(`Step 1: Downloading from Storage: ${storagePath}`);
+      await bucket.file(storagePath).download({ destination: tempFilePath });
+
+      console.log("Step 3: Starting PDF Parsing...");
+      const PDFParser = require("pdf2json");
+      const pdfParser = new PDFParser(null, 1);
+      
+      const tenderText = await new Promise((resolve, reject) => {
+        pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
+        pdfParser.on("pdfParser_dataError", (err) => reject(err));
+        pdfParser.parseBuffer(fs.readFileSync(tempFilePath));
+      });
+
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-      const prompt = `
-        You are a professional Bid Manager. I am providing you with a tender document named "${fileName}".
-        Please extract every specific question or section that requires a written response.
-        
-        Return ONLY a JSON array of objects with this structure:
-        [
-            {"question": "Text of the question", "status": "ready", "aiResponse": "", "confidence": 100},
-            {"question": "Vague question...", "status": "attention", "aiResponse": "", "confidence": 100}
-        ]
-        Set status to "attention" if the question is unclear. Do not include any text other than the JSON.
-      `;
-
-      const result = await model.generateContent([prompt, `Document Link: ${documentUrl}`]);
-      const responseText = result.response.text();
+      console.log("Step 5: Calling Gemini...");
+      const result = await model.generateContent([
+        "Extract questions from this tender as a JSON array: ",
+        tenderText.substring(0, 20000)
+      ]);
       
-      const jsonMatch = responseText.match(/\[.*\]/s);
-      const sections = JSON.parse(jsonMatch[0]);
+      const sections = JSON.parse(result.response.text().match(/\[.*\]/s)[0]);
 
-      const db = getFirestore("default"); 
-      await db.collection("bids").doc(bidId).set({
+      // --- FIXED: Using the explicit DB helper ---
+      await getDb().collection("bids").doc(bidId).update({
         sections: sections,
-        status: "scoping",
-        analysisCompletedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+        status: "scoping"
+      });
 
-      return { success: true, count: sections.length };
+      return { success: true };
+
     } catch (error) {
-      console.error("AI Analysis Error:", error);
+      console.log("!!! CRASH !!!", error.stack);
       return { success: false, error: error.message };
+    } finally {
+      if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
     }
   }
 );
@@ -190,7 +211,8 @@ exports.processMasterDocument = onObjectFinalized(
 
       await index.upsert(vectors);
 
-      const db = getFirestore("default");
+      // --- FIXED: Using the explicit DB helper ---
+      const db = getDb();
       const snap = await db.collection("knowledge").where("ownerId", "==", userId).get();
       const docToUpdate = snap.docs.find(doc => fileName.includes(doc.data().fileName));
 
@@ -205,7 +227,7 @@ exports.processMasterDocument = onObjectFinalized(
   }
 );
 
-// --- KNOWLEDGE BASE DELETE SYNC (STORAGE + PINECONE) ---
+// --- KNOWLEDGE BASE DELETE SYNC ---
 exports.cleanupKnowledgeBase = onDocumentDeleted({
   document: "knowledge/{docId}",
   database: "default",      
@@ -224,9 +246,7 @@ exports.cleanupKnowledgeBase = onDocumentDeleted({
   if (!fileName || !userId) return;
 
   try {
-    // --- STEP 1: DELETE FROM STORAGE ---
     const bucket = admin.storage().bucket();
-    // We try both paths because some uploads use the v1_ prefix
     const possiblePaths = [
       `knowledge/${userId}/${fileName}`,
       `knowledge/${userId}/v1_${fileName}`
@@ -241,11 +261,8 @@ exports.cleanupKnowledgeBase = onDocumentDeleted({
       }
     }
 
-    // --- STEP 2: DELETE FROM PINECONE ---
     const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
     const index = pc.index("mergepoint-index");
-
-    console.log(`Step 2: Fetching IDs for ${fileName} (User: ${userId})...`);
 
     const queryResponse = await index.query({
       vector: Array(768).fill(0), 
@@ -260,11 +277,8 @@ exports.cleanupKnowledgeBase = onDocumentDeleted({
     const idsToDelete = queryResponse.matches.map(m => m.id);
 
     if (idsToDelete.length > 0) {
-      console.log(`Step 3: Deleting ${idsToDelete.length} vectors...`);
       await index.deleteMany(idsToDelete);
       console.log(`SUCCESS: Storage and Pinecone cleared.`);
-    } else {
-      console.log("Storage checked, but no matching vectors found in Pinecone.");
     }
 
   } catch (error) {

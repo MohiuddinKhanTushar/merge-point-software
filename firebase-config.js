@@ -17,9 +17,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with your specific region settings
-const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-}, "default"); 
+const db = initializeFirestore(app, {}, "default"); 
 
 // Initialize Auth
 const auth = getAuth(app);

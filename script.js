@@ -82,8 +82,11 @@ async function handleCreateBid() {
         // STEP B: Generate unique filename and upload
         if (statusText) statusText.innerText = "Uploading tender document...";
         
-        // Create the unique name here so it matches between Storage, Firestore, and the AI call
-        const uniqueFileName = `${Date.now()}_${selectedFile.name}`;
+        // --- FIX: PATH SANITIZATION & STABLE TIMESTAMP ---
+        const timestamp = Date.now();
+        const cleanName = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_'); 
+        const uniqueFileName = `${timestamp}_${cleanName}`;
+        
         const storagePath = `tenders/${user.uid}/${uniqueFileName}`;
         const fileRef = ref(storage, storagePath);
         
@@ -102,7 +105,7 @@ async function handleCreateBid() {
             progress: 10, 
             ownerId: user.uid,
             createdAt: serverTimestamp(),
-            fileName: uniqueFileName, // Store the unique name (with timestamp)
+            fileName: uniqueFileName, // Matches Storage exactly
             pdfUrl: downloadUrl 
         });
 
@@ -113,16 +116,17 @@ async function handleCreateBid() {
         const result = await analyzeTender({ 
             bidId: bidDoc.id,
             documentUrl: downloadUrl, 
-            fileName: uniqueFileName // Pass the unique name to the AI
+            fileName: uniqueFileName // Passing the sanitized name
         });
 
-        if (result.data.success) {
+        if (result.data && result.data.success) {
             if (statusText) statusText.innerText = "Analysis Complete! Opening Workspace...";
             setTimeout(() => {
                 window.location.href = `workspace.html?id=${bidDoc.id}`;
             }, 1000);
         } else {
-            throw new Error(result.data.error || "AI Analysis failed.");
+            const errorMsg = result.data?.error || "AI Analysis failed.";
+            throw new Error(errorMsg);
         }
 
     } catch (e) { 
