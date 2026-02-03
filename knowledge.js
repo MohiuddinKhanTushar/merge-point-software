@@ -130,28 +130,32 @@ function loadLibrary(userId) {
 
         snapshot.forEach((snapshotDoc) => {
             const data = snapshotDoc.data();
-            const docId = snapshotDoc.id; // Get the Firestore ID
+            const docId = snapshotDoc.id; // Capture ID for deletion
             const dateStr = data.uploadedAt?.toDate ? data.uploadedAt.toDate().toLocaleDateString() : 'New Document';
             
+            // MODIFIED cardHtml: Added flex layout to footer and the delete button
             const cardHtml = `
-                <div class="bid-card" id="card-${docId}">
-                    <div class="bid-status-row">
-                        <span class="status-tag won">v${data.version || 1} ${data.status || 'READY'}</span>
-                        <span class="deadline">${dateStr}</span>
-                    </div>
-                    <div class="bid-info">
-                        <h3>${data.fileName}</h3>
-                        <p class="client-name">Master Reference</p>
-                    </div>
-                    <div class="bid-footer" style="margin-top: 1.5rem; display: flex; gap: 0.5rem;">
-                        <button class="btn-outline" style="flex: 3;" onclick="window.open('${data.fileUrl}', '_blank')">
-                            View Document
-                        </button>
-                        <button class="btn-outline delete-btn" style="flex: 1; border-color: #ff4d4d; color: #ff4d4d;" data-id="${docId}">
-                            <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
-                        </button>
-                    </div>
-                </div>`;
+                <div class="bid-card">
+            <div class="bid-status-row">
+                <span class="status-tag won">v${data.version || 1} ${data.status || 'READY'}</span>
+                <span class="deadline">${dateStr}</span>
+            </div>
+            <div class="bid-info">
+                <h3>${data.fileName}</h3>
+                <p class="client-name">Master Reference</p>
+            </div>
+            <div class="bid-footer" style="margin-top: 1.5rem; display: flex; gap: 10px;">
+                <button class="btn-outline" style="flex: 1;" onclick="window.open('${data.fileUrl}', '_blank')">
+                    View Document
+                </button>
+                
+                <button class="btn-secondary-outline btn-danger-hover" title="Delete Document" 
+                        onclick="window.deleteKnowledgeDoc('${docId}', '${data.fileName}')"
+                        style="width: 42px; padding: 0; justify-content: center;">
+                    <i data-lucide="trash-2"></i>
+                </button>
+            </div>
+        </div>`;
             libraryGrid.insertAdjacentHTML('beforeend', cardHtml);
         });
 
@@ -175,3 +179,21 @@ function loadLibrary(userId) {
         if (window.lucide) lucide.createIcons({ root: libraryGrid });
     });
 }
+
+// 6. Delete Function Logic
+async function deleteKnowledgeDoc(docId, fileName) {
+    // Using a simple confirm for now; you can use your custom modal later
+    if (confirm(`Are you sure you want to permanently delete "${fileName}"? This will remove all AI training data for this file.`)) {
+        try {
+            console.log("Deleting document:", docId);
+            await deleteDoc(doc(db, "knowledge", docId));
+            // The Cloud Function cleanupKnowledgeBase will handle Storage and Pinecone automatically
+        } catch (error) {
+            console.error("Error deleting document:", error);
+            alert("Failed to delete document: " + error.message);
+        }
+    }
+}
+
+// Expose to window so the onclick works
+window.deleteKnowledgeDoc = deleteKnowledgeDoc;

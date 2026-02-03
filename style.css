@@ -961,11 +961,11 @@ body {
     animation: slideDown 0.3s ease-out;
 }
 
-.delete-btn:hover {
-    background-color: #ff4d4d !important;
-    color: white !important;
-    border-color: #ff4d4d !important;
-    transition: all 0.2s ease;
+/* Custom Danger Hover for Delete Buttons */
+.btn-secondary-outline.btn-danger-hover:hover {
+    background-color: #fff1f2 !important; /* Soft Red */
+    border-color: #fecaca !important;     /* Light Red Border */
+    color: #ef4444 !important;            /* Bright Red Icon/Text */
 }
 
 @keyframes slideDown {
