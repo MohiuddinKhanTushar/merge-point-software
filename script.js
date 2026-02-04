@@ -12,11 +12,11 @@ import {
     getDocs, 
     deleteDoc, 
     serverTimestamp,
-    Timestamp 
+    Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // --- STORAGE & FUNCTIONS IMPORTS ---
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
 // Initialize Sidebar and Services
@@ -213,11 +213,16 @@ function loadActiveBids(userId) {
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; margin-top: 1rem;">
-                        <button class="btn-outline" style="flex: 1;" onclick="window.location.href='/workspace.html?id=${bidId}'">Open Workspace</button>
-                        <button class="btn-secondary-outline" title="Archive Bid" onclick="archiveBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center;">
-                            <i data-lucide="archive" style="width: 18px; height: 18px;"></i>
-                        </button>
-                    </div>
+    <button class="btn-outline" style="flex: 1;" onclick="window.location.href='/workspace.html?id=${bidId}'">Open Workspace</button>
+    
+    <button class="btn-secondary-outline" title="Archive Bid" onclick="archiveBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center;">
+        <i data-lucide="archive" style="width: 18px; height: 18px;"></i>
+    </button>
+
+    <button class="btn-secondary-outline delete-btn-hover" title="Delete Permanent" onclick="deleteBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center; color: #ef4444;">
+        <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+    </button>
+</div>
                 </div>
             `;
         });
@@ -277,3 +282,46 @@ window.closeConfirmModal = () => {
     const modal = document.getElementById('confirm-modal');
     if (modal) modal.style.display = 'none';
 };
+
+// 7. Permanent Delete Logic
+async function deleteBid(bidId) {
+    window.showCustomConfirm(
+        "Delete Project Permanently?", 
+        "This will delete the AI analysis and the uploaded PDF from storage. This cannot be undone.", 
+        async () => {
+            try {
+                const user = auth.currentUser;
+                if (!user) return;
+
+                const bidRef = doc(firestore, "bids", bidId);
+                const bidSnap = await getDoc(bidRef);
+
+                if (bidSnap.exists()) {
+                    const data = bidSnap.data();
+                    const fileName = data.fileName;
+
+                    // 1. Delete from Firebase Storage if fileName exists
+                    if (fileName) {
+                        try {
+                            const storagePath = `tenders/${user.uid}/${fileName}`;
+                            const fileRef = ref(storage, storagePath);
+                            await deleteObject(fileRef);
+                            console.log("File deleted from storage");
+                        } catch (storageErr) {
+                            // If file is already gone, we still want to delete the Firestore doc
+                            console.warn("Storage deletion failed or file not found:", storageErr);
+                        }
+                    }
+
+                    // 2. Delete from Firestore
+                    await deleteDoc(bidRef);
+                    console.log("Firestore document deleted");
+                }
+            } catch (error) { 
+                console.error("Delete error:", error);
+                alert("Failed to delete project: " + error.message);
+            }
+        }
+    );
+}
+window.deleteBid = deleteBid;
