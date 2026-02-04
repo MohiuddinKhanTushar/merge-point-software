@@ -99,7 +99,7 @@ html.sidebar-is-collapsed .nav-links li a {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
 }
 
 .toggle-btn {
@@ -113,6 +113,7 @@ html.sidebar-is-collapsed .nav-links li a {
     justify-content: center;
     border-radius: 4px;
     margin-left: auto;
+    margin-top: -5px;
 
 }
 
@@ -285,7 +286,7 @@ body {
 .nav-links {
     list-style: none; /* Removes bullet points */
     padding: 0;
-    margin-top: 2rem;
+    margin-top: 0.5rem;
 }
 
 .nav-links li {
@@ -1404,4 +1405,25 @@ html.sidebar-is-collapsed .logout-link,
 @keyframes pulse-animation {
     0% { box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.2); }
     100% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+}
+
+/* Ensure the logo container doesn't squeeze the image */
+.sidebar .logo {
+    padding: 0; /* Remove inherited padding if necessary */
+    margin-bottom: 0 !important;
+    display: flex;
+    align-items: center;
+}
+
+/* Make the image responsive to the sidebar width */
+.logo-img {
+    max-width: 100%;  /* Ensures it never overflows the sidebar */
+    height: auto;     /* Maintains aspect ratio */
+    display: block;
+}
+
+/* Specific adjustment for when the sidebar is collapsed */
+.sidebar.collapsed .logo,
+html.sidebar-is-collapsed .sidebar .logo {
+    display: none !important; /* This matches your existing logic */
 }
