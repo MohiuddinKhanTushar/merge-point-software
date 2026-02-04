@@ -18,7 +18,6 @@ setGlobalOptions({
     maxInstances: 10 
 });
 
-// STABLE: Keep your explicit Europe DB routing
 const getDb = () => getFirestore('default');
 
 const pineconeApiKey = defineSecret("PINECONE_API_KEY");
@@ -38,7 +37,7 @@ exports.checkPineconeConnection = onRequest(
   }
 );
 
-// --- GEMINI TENDER ANALYSIS (STRICT VERSION) ---
+// --- GEMINI TENDER ANALYSIS ---
 exports.analyzeTenderDocument = onCall(
   { secrets: [geminiApiKey], timeoutSeconds: 540, memory: "2GiB" }, 
   async (request) => {
@@ -59,40 +58,21 @@ exports.analyzeTenderDocument = onCall(
       });
 
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      // IMPROVEMENT: Set temperature to 0 to stop hallucinations
       const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash",
-        generationConfig: {
-          temperature: 0,
-          topP: 0.1,
-          maxOutputTokens: 4096,
-        }
+        generationConfig: { temperature: 0, topP: 0.1, maxOutputTokens: 4096 }
       });
 
       const prompt = `
-       You are a Precise Tender Parser.
+        You are a Precise Tender Parser. Extract every requirement and assign to correct headings.
+        RULES: 
+        1. Capture all list items and bullet points.
+        2. Identify specific technical/compliance requirements.
+        3. Copy text exactly (Verbatim).
+        OUTPUT FORMAT (JSON):
+        [{"sectionTitle": "Heading", "question": "Requirement Text", "sourceQuote": "Full Line"}]
         
-        TASK:
-        Exhaustively extract every requirement, deliverable, or question found in this document.
-        
-        STRICT HIERARCHY RULES:
-        1. IDENTIFY SECTIONS: Look for headings (e.g., "1. Project Background", "2. Digital Requirements"). Assign every requirement to the heading it falls under.
-        2. CAPTURE ALL LIST ITEMS: Any text preceded by a bullet point (•), a letter (a, b, c), or a code (DR-01, etc.) MUST be extracted.
-        3. CAPTURE ALL INSTRUCTIONS: Any sentence that specifies a capability the solution "must" have or an action the bidder "must" take is a requirement.
-        4. NO SELECTIVITY: Do not judge if a requirement is important. If it is in the text, it must be in the JSON.
-        5. VERBATIM: Do not reword. Copy text exactly.
-
-        OUTPUT FORMAT (JSON ONLY):
-        [
-          {
-            "sectionTitle": "The current heading name (e.g. 2. Digital Requirements)",
-            "question": "The exact requirement text",
-            "sourceQuote": "The full line from the PDF"
-          }
-        ]
-
-        DOCUMENT TEXT:
-        ${tenderText.substring(0, 35000)}
+        TEXT: ${tenderText.substring(0, 35000)}
       `;
 
       const result = await model.generateContent(prompt);
@@ -106,9 +86,7 @@ exports.analyzeTenderDocument = onCall(
       });
 
       return { success: true, count: sections.length };
-
     } catch (error) {
-      console.error("ANALYSIS ERROR:", error);
       return { success: false, error: error.message };
     } finally {
       if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
@@ -116,18 +94,18 @@ exports.analyzeTenderDocument = onCall(
   }
 );
 
-// --- RAG-ENABLED SECTION DRAFTER ---
+// --- RAG SECTION DRAFTER (SMOOTH SCORING VERSION) ---
 exports.generateSectionDraft = onCall(
   { secrets: [geminiApiKey, pineconeApiKey] }, 
   async (request) => {
     if (!request.auth) throw new Error("Unauthorized");
-    const { question } = request.data;
+    const { question, bidId, sectionIndex } = request.data;
     const userId = request.auth.uid;
     
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
       const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { temperature: 0.3 } });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { temperature: 0.2 } });
 
       const embedding = await embedModel.embedContent(question);
       const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
@@ -135,30 +113,92 @@ exports.generateSectionDraft = onCall(
 
       const queryResponse = await index.query({
         vector: embedding.embedding.values.slice(0, 768),
-        topK: 4,
+        topK: 6,
         filter: { ownerId: userId },
         includeMetadata: true
       });
 
+      const topMatch = queryResponse.matches.length > 0 ? queryResponse.matches[0] : null;
+      const rawVectorScore = topMatch ? topMatch.score : 0;
       const contextText = queryResponse.matches.map(m => m.metadata.text).join("\n\n---\n\n");
 
-      const prompt = `
-        Draft a response to: "${question}"
-        Using ONLY this context:
-        ${contextText || "No context found."}
+      // --- CRITICAL AI EVALUATION ---
+      const evalPrompt = `
+        Requirement: "${question}"
+        Available Knowledge: "${contextText || "No context found."}"
         
-        Tone: Professional and persuasive.
+        Evaluate the relevancy of the knowledge base to the requirement.
+        - 10: Direct, explicit answer found.
+        - 8: Strong information that fully covers the intent.
+        - 5: Partial information; some drafting needed.
+        - 2: Very weak or only tangentially related.
+        - 0: Completely unrelated.
+
+        Return ONLY the number.
+      `;
+
+      const evalResult = await model.generateContent(evalPrompt);
+      const aiRating = parseFloat(evalResult.response.text().trim()) || 0;
+
+      // --- DYNAMIC SCORING (NO HARD FLOORS) ---
+      // Vector score normalized (0.6 to 0.9 is the sweet spot)
+      const vectorConfidence = Math.min(Math.max((rawVectorScore - 0.1) / 0.8 * 100, 0), 100);
+      const aiConfidence = (aiRating / 10) * 100;
+      
+      // Calculate a weighted average
+      let finalConfidence = Math.round((aiConfidence * 0.7) + (vectorConfidence * 0.3));
+
+      // Apply a logical minimum if context was actually found
+      if (queryResponse.matches.length > 0) {
+        finalConfidence = Math.max(finalConfidence, 12);
+      }
+
+      const safeConfidence = Math.min(finalConfidence, 98);
+
+      const prompt = `
+        Draft a focused, professional tender response to ONLY the following requirement:
+        "${question}"
+
+        Using ONLY this context:
+        ${contextText || "No relevant company information found."}
+        
+        INSTRUCTIONS:
+        1. Professional and persuasive tone.
+        2. DO NOT draft other sections.
+        3. If context is missing, focus on the firm's general expertise while keeping the tone professional.
       `;
 
       const result = await model.generateContent(prompt);
-      return { success: true, answer: result.response.text(), contextFound: queryResponse.matches.length > 0 };
+      const answerText = result.response.text();
+
+      // --- PERSISTENCE ---
+      if (bidId && sectionIndex !== undefined) {
+        const bidRef = getDb().collection("bids").doc(bidId);
+        const bidDoc = await bidRef.get();
+        if (bidDoc.exists) {
+            const sections = bidDoc.data().sections || [];
+            if (sections[sectionIndex]) {
+                sections[sectionIndex].draftAnswer = answerText;
+                sections[sectionIndex].confidence = safeConfidence;
+                sections[sectionIndex].lastDraftedAt = new Date().toISOString();
+                await bidRef.update({ sections: sections });
+            }
+        }
+      }
+      
+      return { 
+        success: true, 
+        answer: answerText, 
+        confidence: safeConfidence,
+        contextFound: queryResponse.matches.length > 0 
+      };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 );
 
-// --- KNOWLEDGE BASE SYNC (UPLOAD) ---
+// --- KNOWLEDGE BASE SYNC ---
 exports.processMasterDocument = onObjectFinalized(
   { region: "us-east1", secrets: [geminiApiKey, pineconeApiKey], timeoutSeconds: 300, memory: "1GiB" },
   async (event) => {
@@ -209,7 +249,7 @@ exports.processMasterDocument = onObjectFinalized(
   }
 );
 
-// --- KNOWLEDGE BASE DELETE SYNC (STABLE: DON'T REMOVE THIS) ---
+// --- KNOWLEDGE BASE DELETE SYNC ---
 exports.cleanupKnowledgeBase = onDocumentDeleted({
   document: "knowledge/{docId}",
   database: "default",      
@@ -238,7 +278,6 @@ exports.cleanupKnowledgeBase = onDocumentDeleted({
 
     const ids = queryResponse.matches.map(m => m.id);
     if (ids.length > 0) await index.deleteMany(ids);
-    console.log("Cleanup successful");
   } catch (error) {
     console.error("CLEANUP ERROR:", error.message);
   }

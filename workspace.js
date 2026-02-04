@@ -39,9 +39,11 @@ checkAuthState((user) => {
                 renderSectionsList(data.sections || []);
                 updateGlobalProgress(data.sections || []);
 
+                // If a section is active, update the editor and metrics from the live Firestore data
                 if (activeSectionIndex !== null && document.activeElement !== document.getElementById('ai-content-editor')) {
                     const activeSection = data.sections[activeSectionIndex];
-                    document.getElementById('ai-content-editor').value = activeSection.aiResponse || "";
+                    document.getElementById('ai-content-editor').value = activeSection.draftAnswer || activeSection.aiResponse || "";
+                    updateMetrics(activeSection.draftAnswer || activeSection.aiResponse || "", activeSection.confidence);
                 }
             }
         });
@@ -52,7 +54,8 @@ checkAuthState((user) => {
 
 function updateGlobalProgress(sections) {
     if (!sections || sections.length === 0) return;
-    const completedCount = sections.filter(s => s.aiResponse && s.aiResponse.trim().length > 0).length;
+    // Check for either aiResponse (legacy) or draftAnswer (new)
+    const completedCount = sections.filter(s => (s.aiResponse && s.aiResponse.trim().length > 0) || (s.draftAnswer && s.draftAnswer.trim().length > 0)).length;
     const percentage = Math.round((completedCount / sections.length) * 100);
     const bar = document.getElementById('overall-progress-bar');
     const text = document.getElementById('progress-text');
@@ -79,7 +82,7 @@ function renderSectionsList(sections) {
             let statusText = "EMPTY";
             let statusClass = "status-empty";
 
-            if (section.aiResponse && section.aiResponse.trim().length > 0) {
+            if ((section.aiResponse && section.aiResponse.trim().length > 0) || (section.draftAnswer && section.draftAnswer.trim().length > 0)) {
                 statusText = "COMPLETED";
                 statusClass = "status-ready";
             } else if (section.status === 'attention') {
@@ -99,11 +102,15 @@ function renderSectionsList(sections) {
                 document.querySelectorAll('.section-item').forEach(el => el.classList.remove('active'));
                 item.classList.add('active');
                 document.getElementById('current-section-name').innerText = section.question;
+                
                 const editor = document.getElementById('ai-content-editor');
-                const content = section.aiResponse || "";
+                const content = section.draftAnswer || section.aiResponse || "";
                 editor.value = content;
                 editor.placeholder = "AI hasn't drafted this yet. Click 'Generate AI Draft' above to start.";
+                
+                // Pass the saved confidence from the section data
                 updateMetrics(content, section.confidence);
+                
                 if (window.lucide) lucide.createIcons();
                 setupMagicButton(section.question);
             };
@@ -127,15 +134,20 @@ function setupMagicButton(questionText) {
 
         try {
             const generateDraft = httpsCallable(functions, 'generateSectionDraft');
+            // UPDATED: Now passing bidId and sectionIndex for persistence
             const result = await generateDraft({ 
                 question: questionText,
-                bidId: bidId 
+                bidId: bidId,
+                sectionIndex: activeSectionIndex
             });
 
             if (result.data.success) {
                 editor.value = result.data.answer;
-                currentBidData.sections[activeSectionIndex].aiResponse = result.data.answer;
-                updateMetrics(result.data.answer, result.data.confidence || 85);
+                // Locally update state (onSnapshot will also handle this)
+                currentBidData.sections[activeSectionIndex].draftAnswer = result.data.answer;
+                currentBidData.sections[activeSectionIndex].confidence = result.data.confidence;
+                
+                updateMetrics(result.data.answer, result.data.confidence);
             } else { throw new Error(result.data.error); }
         } catch (e) {
             console.error("Drafting failed", e);
@@ -151,7 +163,11 @@ function setupMagicButton(questionText) {
 function updateMetrics(text, confidence) {
     const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
     document.getElementById('word-count').innerText = wordCount;
-    document.getElementById('confidence-level').innerText = confidence ? `${confidence}%` : "100%";
+    
+    const confidenceEl = document.getElementById('confidence-level');
+    // If confidence is 0 or undefined, show 10% as floor, otherwise show value
+    const displayConfidence = confidence !== undefined ? confidence : 0;
+    confidenceEl.innerText = displayConfidence > 0 ? `${displayConfidence}%` : "---";
 }
 
 // --- ACTION HANDLERS ---
@@ -189,7 +205,10 @@ document.getElementById('save-bid-btn').addEventListener('click', async () => {
     if (activeSectionIndex === null) return alert("Select a section first.");
     const content = document.getElementById('ai-content-editor').value;
     const updatedSections = [...currentBidData.sections];
-    updatedSections[activeSectionIndex].aiResponse = content;
+    
+    // Save to the persistent field used by the AI
+    updatedSections[activeSectionIndex].draftAnswer = content;
+    
     try {
         await updateDoc(doc(db, "bids", bidId), { sections: updatedSections });
         updateGlobalProgress(updatedSections);
