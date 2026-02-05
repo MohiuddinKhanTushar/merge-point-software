@@ -52,18 +52,37 @@ checkAuthState((user) => {
 
 // --- UI RENDERING ---
 
-function updateGlobalProgress(sections) {
+async function updateGlobalProgress(sections) {
     if (!sections || sections.length === 0) return;
-    // Check for either aiResponse (legacy) or draftAnswer (new)
-    const completedCount = sections.filter(s => (s.aiResponse && s.aiResponse.trim().length > 0) || (s.draftAnswer && s.draftAnswer.trim().length > 0)).length;
+
+    // 1. Calculate the percentage based on completed sections
+    const completedCount = sections.filter(s => 
+        (s.aiResponse && s.aiResponse.trim().length > 0) || 
+        (s.draftAnswer && s.draftAnswer.trim().length > 0)
+    ).length;
+    
     const percentage = Math.round((completedCount / sections.length) * 100);
+
+    // 2. Update the Local Workspace UI (The Progress Bar on the page)
     const bar = document.getElementById('overall-progress-bar');
     const text = document.getElementById('progress-text');
     if (bar && text) {
         bar.style.width = `${percentage}%`;
         text.innerText = `${percentage}% Done`;
-        if (percentage === 100) { bar.style.background = "#22c55e"; } 
-        else { bar.style.background = "#6366f1"; }
+        bar.style.background = percentage === 100 ? "#22c55e" : "#6366f1";
+    }
+
+    // 3. PERSIST TO FIRESTORE (This updates the Bid Card on the dashboard)
+    try {
+        const bidRef = doc(db, "bids", bidId);
+        await updateDoc(bidRef, { 
+            progress: percentage,
+            // Logic: if they've started working, it's definitely 'drafting'
+            status: percentage === 100 ? "review" : "drafting" 
+        });
+        console.log("Global progress synced to Firestore:", percentage);
+    } catch (e) {
+        console.error("Failed to sync progress to database:", e);
     }
 }
 
@@ -148,6 +167,7 @@ function setupMagicButton(questionText) {
                 currentBidData.sections[activeSectionIndex].confidence = result.data.confidence;
                 
                 updateMetrics(result.data.answer, result.data.confidence);
+                updateGlobalProgress(currentBidData.sections);
             } else { throw new Error(result.data.error); }
         } catch (e) {
             console.error("Drafting failed", e);
