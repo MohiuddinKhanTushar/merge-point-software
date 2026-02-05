@@ -1429,3 +1429,189 @@ html.sidebar-is-collapsed .logout-link,
 html.sidebar-is-collapsed .sidebar .logo {
     display: none !important; /* This matches your existing logic */
 }
+
+/* --- TEAM HUB SPECIFIC STYLING --- */
+
+/* Stats Grid for Management Overview */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+}
+
+.stat-card {
+    background: var(--white);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--primary);
+}
+
+/* Review Table Styling */
+.table-container {
+    background: var(--white);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden; /* Keeps header corners rounded */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+thead {
+    background-color: #f8fafc;
+}
+
+th {
+    padding: 1rem 1.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #64748b;
+    border-bottom: 2px solid var(--border);
+}
+
+td {
+    padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    font-size: 0.9rem;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover {
+    background-color: #f1f5f9;
+}
+
+/* Urgent / Status Indicators */
+.urgent {
+    color: #ef4444;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+
+
+/* Action Button */
+.btn-review {
+    background: var(--primary);
+    color: var(--white);
+    border: none;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+}
+
+.btn-review:hover {
+    background: #1d4ed8;
+}
+
+/* Loading State for Dynamic Table */
+.loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- TEAM HUB TABLE ALIGNMENT FIX --- */
+
+.table-container table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed; /* Forces columns to respect set widths */
+}
+
+/* Base cell styling */
+.table-container th, 
+.table-container td {
+    padding: 1rem 1.5rem;
+    text-align: left;
+    vertical-align: middle;
+    line-height: 1.4;
+}
+
+/* Column Width Logic */
+.table-container th:nth-child(1), .table-container td:nth-child(1) { width: 30%; } /* Tender Name */
+.table-container th:nth-child(2), .table-container td:nth-child(2) { width: 25%; } /* Submitted By */
+.table-container th:nth-child(3), .table-container td:nth-child(3) { width: 15%; } /* Date */
+.table-container th:nth-child(4), .table-container td:nth-child(4) { width: 15%; } /* Deadline */
+.table-container th:nth-child(5), .table-container td:nth-child(5) { width: 15%; text-align: right; } /* Action */
+
+/* Header Text Styling */
+.table-container th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    background: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+/* Fix for the "Submitted By" multi-line text */
+.table-container td strong { display: block; color: #1e293b; }
+.table-container td small {
+    display: block;
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+/* Urgent dot alignment - CLEANED (No ::before) */
+.urgent {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #ef4444;
+    font-weight: 700;
+}
+
+/* Review Button alignment */
+.btn-review {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+}
