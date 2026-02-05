@@ -15,7 +15,6 @@
         const savedInitial = localStorage.getItem('userInitial');
         
         if (savedName && savedInitial) {
-            // We use a small interval just to ensure the DOM elements exist
             const checkExist = setInterval(function() {
                 const nameEl = document.getElementById('display-name');
                 const avatarEl = document.getElementById('avatar-circle');
@@ -25,10 +24,10 @@
                     avatarEl.textContent = savedInitial;
                     clearInterval(checkExist);
                 }
-            }, 5); // Checks every 5ms
+            }, 5);
         }
     })();
-</script>
+    </script>
 
     <script>
         (function() {
@@ -38,60 +37,95 @@
             }
         })();
     </script>
+
+    <style>
+        /* Modern styling for the new dropdown */
+        .category-selection {
+            max-width: 400px;
+            margin: 0 auto 1.5rem auto;
+            text-align: left;
+        }
+        .category-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-main);
+        }
+        .styled-select {
+            width: 100%;
+            padding: 0.8rem;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+            font-size: 0.95rem;
+            color: #1e293b;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .styled-select:focus {
+            outline: none;
+            border-color: var(--primary-color, #4f46e5);
+        }
+        .category-hint {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+    </style>
 </head>
 <body>
     <div class="dashboard-container">
         <nav class="sidebar" id="sidebar">
-            <div class="logo">
-    <a href="dashboard.html">
-        <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
-    </a>
-</div>
-    <button id="sidebar-toggle" class="toggle-btn">
-            <i data-lucide="chevron-left"></i>
-        </button>
-    
-    <ul class="nav-links">
-        <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
-        <li class="active"><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
-        <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
-        <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
-        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
-        <li><a href="#"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
-        <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
-    </ul>
+            <div class="logo">MergePoint</div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+            
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li class="active"><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li><a href="#"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
 
-    <div class="sidebar-footer">
-        <div class="user-profile-mini">
-        <div class="avatar" id="avatar-circle">?</div>
-        <div class="user-info">
-            <span class="user-name" id="display-name">Loading...</span>
-            <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
-        </div>
-    </div>
-    <ul class="nav-links logout-nav">
-        <li>
-            <a href="#" id="logout-btn" class="logout-link">
-                <i data-lucide="log-out"></i> <span>Logout</span>
-            </a>
-            </li>
-        </ul>
-    </div>
-</nav>
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+                    <div class="avatar" id="avatar-circle">?</div>
+                    <div class="user-info">
+                        <span class="user-name" id="display-name">Loading...</span>
+                        <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
+                    </div>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
 
         <main class="main-content">
             <header class="top-bar">
                 <div class="welcome-text">
                     <h1>Knowledge Base</h1>
-                    <p>Upload your Master Documents and Case Studies here.</p>
+                    <p>Manage the documents that power your AI RFP drafts.</p>
                 </div>
             </header>
 
             <section class="hero-action-card">
                 <div class="action-content">
                     <div class="text-group">
-                        <h2>Master Knowledge Base</h2>
-                        <p>Upload your company's master documents and case studies. Our AI uses these to ensure every response is accurate and tailored to your brand.</p>
+                        <h2>Living Knowledge Base</h2>
+                        <p>Upload core documents or quick feature updates. MergePoint automatically prioritizes the most recent information to keep your responses accurate.</p>
                     </div>
                     <button class="btn-hero" id="knowledge-upload-trigger">
                         <i data-lucide="database"></i> Manage Documents
@@ -101,14 +135,28 @@
                 <div class="upload-zone" id="knowledge-upload-section">
                     <div class="upload-header">
                         <i data-lucide="file-up" class="upload-icon"></i>
-                        <h3>Upload Master Document</h3>
+                        <h3>Upload Knowledge Source</h3>
                         <p>Supports PDF or DOCX</p>
                     </div>
                     
+                    <div class="category-selection">
+                        <label for="doc-category" class="category-label">Document Category</label>
+                        <select id="doc-category" class="styled-select">
+                            <option value="master" data-priority="1">Master Reference (Foundation)</option>
+                            <option value="policy" data-priority="2">Company Policy</option>
+                            <option value="case-study" data-priority="3">Case Study / Evidence</option>
+                            <option value="update" data-priority="5">Product / Feature Update (Priority)</option>
+                        </select>
+                        <div class="category-hint">
+                            <i data-lucide="info" style="width:14px; height:14px;"></i> 
+                            Updates override Master docs if information conflicts.
+                        </div>
+                    </div>
+
                     <div class="drop-area">
                         <input type="file" id="knowledge-file-input" hidden accept=".pdf,.docx">
                         <button class="btn-secondary" onclick="document.getElementById('knowledge-file-input').click()">
-                            Select Master File
+                            Select File to Upload
                         </button>
                         <div id="knowledge-file-list"></div>
                     </div>
@@ -120,7 +168,9 @@
                         <p id="knowledge-status-text">Uploading to Library...</p>
                     </div>
                 </div>
-            </section> <section class="active-bids-list">
+            </section> 
+
+            <section class="active-bids-list">
                 <div class="section-header">
                     <div class="title-group">
                         <h2>Your Library</h2>
