@@ -13,19 +13,20 @@ const fs = require("fs");
 
 admin.initializeApp();
 
+// Ensure the region matches your Firestore/Storage setup
 setGlobalOptions({ 
     region: "us-east1",
     maxInstances: 10 
 });
 
-const getDb = () => getFirestore('default');
+const getDb = () => getFirestore("default");
 
 const pineconeApiKey = defineSecret("PINECONE_API_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // --- PINECONE CONNECTION TEST ---
 exports.checkPineconeConnection = onRequest(
-  { secrets: [pineconeApiKey] }, 
+  { secrets: [pineconeApiKey] },
   async (req, res) => {
     try {
       const pc = new Pinecone({ apiKey: pineconeApiKey.value().trim() });
@@ -37,11 +38,12 @@ exports.checkPineconeConnection = onRequest(
   }
 );
 
-// --- GEMINI TENDER ANALYSIS (ANTI-HALLUCINATION) ---
+// --- GEMINI TENDER ANALYSIS ---
 exports.analyzeTenderDocument = onCall(
-  { secrets: [geminiApiKey], timeoutSeconds: 540, memory: "2GiB" }, 
+  { secrets: [geminiApiKey], timeoutSeconds: 540, memory: "2GiB" },
   async (request) => {
     if (!request.auth) throw new Error("Unauthorized: You must be logged in.");
+
     const { bidId, fileName } = request.data;
     const tempFilePath = path.join("/tmp", `tender_${Date.now()}.pdf`);
 
@@ -52,41 +54,31 @@ exports.analyzeTenderDocument = onCall(
 
       const PDFParser = require("pdf2json");
       const pdfParser = new PDFParser(null, 1);
+
       const tenderText = await new Promise((resolve, reject) => {
         pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
-        pdfParser.on("pdfParser_dataError", (err) => reject(err));
+        pdfParser.on("pdfParser_dataError", err => reject(err));
         pdfParser.parseBuffer(fs.readFileSync(tempFilePath));
       });
 
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.0-flash",
-        generationConfig: { temperature: 0, topP: 0.1, maxOutputTokens: 4096 }
-      });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-      // Unified Prompt: Verbatim extraction + status flagging
       const prompt = `
-        You are a professional Bid Manager. I am providing you with a tender document.
-        Extract every specific question or section that requires a written response.
-        
-        RULES:
-        1. Capture items exactly as they appear (Verbatim).
-        2. Set status to "attention" if the requirement is vague or unclear.
-        3. Set status to "ready" for clear questions.
-        
-        Return ONLY a JSON array of objects:
-        [{"sectionTitle": "Heading", "question": "Requirement Text", "status": "ready/attention", "aiResponse": "", "confidence": 100}]
-        
+        You are a professional Bid Manager.
+        Extract every question or section that requires a written response.
+        Return ONLY valid JSON in this format:
+        [{"sectionTitle": "Heading", "question": "Requirement text", "status": "ready", "aiResponse": "", "confidence": 100}]
         TEXT: ${tenderText.substring(0, 35000)}
       `;
 
       const result = await model.generateContent(prompt);
       const responseText = result.response.text();
-      const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]|\[\s*\]/);
+      const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
       const sections = JSON.parse(jsonMatch[0]);
 
       await getDb().collection("bids").doc(bidId).update({
-        sections: sections,
+        sections,
         status: "scoping",
         extractedAt: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -100,25 +92,34 @@ exports.analyzeTenderDocument = onCall(
   }
 );
 
-// --- RAG SECTION DRAFTER (PRIORITY & CONTEXT AWARE) ---
+// --- RAG SECTION DRAFTER ---
 exports.generateSectionDraft = onCall(
-  { secrets: [geminiApiKey, pineconeApiKey] }, 
+  { secrets: [geminiApiKey, pineconeApiKey] },
   async (request) => {
     if (!request.auth) throw new Error("Unauthorized");
+
     const { question, bidId, sectionIndex } = request.data;
     const userId = request.auth.uid;
-    
+
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+      
+      // FIXED: Switched to stable gemini-embedding-001
+      const embedModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-      const embedding = await embedModel.embedContent(question);
+      // Generate embedding with explicit 768 dimensions to match your Pinecone Index
+      const embedding = await embedModel.embedContent({
+        content: { parts: [{ text: question }] },
+        taskType: "RETRIEVAL_QUERY",
+        outputDimensionality: 768
+      });
+
       const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
       const index = pc.index("mergepoint-index");
 
       const queryResponse = await index.query({
-        vector: embedding.embedding.values.slice(0, 768),
+        vector: embedding.embedding.values,
         topK: 8,
         filter: { ownerId: userId },
         includeMetadata: true
@@ -130,19 +131,11 @@ exports.generateSectionDraft = onCall(
         return `[Source: ${cat} | Priority: ${prio}]\n${m.metadata.text}`;
       }).join("\n\n---\n\n");
 
-      // Unified Prompt: Professional Bid Writer tone + Priority Logic
       const prompt = `
-        You are an expert Bid Writer. Draft a professional response to the tender question below using the provided COMPANY CONTEXT.
-        
+        You are an expert Bid Writer.
         QUESTION: "${question}"
-        
-        COMPANY CONTEXT:
-        ${contextText || "No specific company documents found."}
-        
-        INSTRUCTIONS:
-        1. Use a professional, persuasive, and confident tone.
-        2. CONFLICT RESOLUTION: If information from a high priority (e.g. Priority 5) source conflicts with a lower one, use the higher priority info.
-        3. Return ONLY the text of the drafted response.
+        COMPANY CONTEXT: ${contextText || "No relevant company information found."}
+        Write a clear, compliant draft response. Return ONLY the response text.
       `;
 
       const result = await model.generateContent(prompt);
@@ -150,21 +143,14 @@ exports.generateSectionDraft = onCall(
 
       if (bidId && sectionIndex !== undefined) {
         const bidRef = getDb().collection("bids").doc(bidId);
-        const bidDoc = await bidRef.get();
-        if (bidDoc.exists) {
-            const sections = bidDoc.data().sections || [];
-            if (sections[sectionIndex]) {
-                sections[sectionIndex].draftAnswer = answerText;
-                await bidRef.update({ sections: sections });
-            }
+        const sections = (await bidRef.get()).data()?.sections || [];
+        if (sections[sectionIndex]) {
+          sections[sectionIndex].draftAnswer = answerText;
+          await bidRef.update({ sections });
         }
       }
-      return { 
-        success: true, 
-        answer: answerText,
-        confidence: contextText ? 95 : 75,
-        contextFound: queryResponse.matches.length > 0
-      };
+
+      return { success: true, answer: answerText, contextFound: queryResponse.matches.length > 0 };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -175,8 +161,8 @@ exports.generateSectionDraft = onCall(
 exports.processMasterDocument = onObjectFinalized(
   { region: "us-east1", secrets: [geminiApiKey, pineconeApiKey], timeoutSeconds: 300, memory: "1GiB" },
   async (event) => {
-    const filePath = event.data.name; 
-    if (!filePath.toLowerCase().includes("knowledge/") || !filePath.toLowerCase().endsWith(".pdf")) return;
+    const filePath = event.data.name;
+    if (!filePath?.toLowerCase().includes("knowledge/") || !filePath.toLowerCase().endsWith(".pdf")) return;
 
     const bucket = admin.storage().bucket(event.data.bucket);
     const pathParts = filePath.split("/");
@@ -186,39 +172,38 @@ exports.processMasterDocument = onObjectFinalized(
     try {
       const db = getDb();
       const snap = await db.collection("knowledge").where("ownerId", "==", userId).get();
-      const metaDoc = snap.docs.find(doc => fileName.includes(doc.data().fileName));
+      const metaDoc = snap.docs.find(d => fileName.includes(d.data().fileName));
       
       const category = metaDoc?.data()?.category || "master";
       const priority = metaDoc?.data()?.priority || 1;
 
       const tempFilePath = path.join("/tmp", fileName);
       await bucket.file(filePath).download({ destination: tempFilePath });
-      
+
       const PDFParser = require("pdf2json");
-      const pdfParser = new PDFParser(null, 1); 
-      const fullText = await new Promise((resolve) => {
+      const pdfParser = new PDFParser(null, 1);
+      const fullText = await new Promise(resolve => {
         pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
         pdfParser.parseBuffer(fs.readFileSync(tempFilePath));
       });
 
       const chunks = fullText.match(/[\s\S]{1,1000}/g) || [];
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+      const embedModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+
       const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
       const index = pc.index("mergepoint-index");
 
       const vectors = await Promise.all(chunks.map(async (chunk, i) => {
-        const result = await embedModel.embedContent(chunk);
+        const result = await embedModel.embedContent({
+          content: { parts: [{ text: chunk }] },
+          taskType: "RETRIEVAL_DOCUMENT",
+          outputDimensionality: 768
+        });
         return {
           id: `${userId}_${Date.now()}_${i}`,
-          values: result.embedding.values.slice(0, 768),
-          metadata: { 
-            text: chunk, 
-            ownerId: userId, 
-            source: fileName,
-            category: category,
-            priority: priority
-          }
+          values: result.embedding.values,
+          metadata: { text: chunk, ownerId: userId, source: fileName, category, priority }
         };
       }));
 
@@ -232,56 +217,32 @@ exports.processMasterDocument = onObjectFinalized(
 );
 
 // --- KNOWLEDGE BASE DELETE SYNC ---
-exports.cleanupKnowledgeBase = onDocumentDeleted({
-  document: "knowledge/{docId}",
-  database: "default",      
-  region: "europe-west2", 
-  secrets: [pineconeApiKey] 
-}, async (event) => {
-  const snapshot = event.data;
-  if (!snapshot) return;
+exports.cleanupKnowledgeBase = onDocumentDeleted(
+  { document: "knowledge/{docId}", database: "default", region: "europe-west2", secrets: [pineconeApiKey] },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data?.fileName || !data?.ownerId) return;
 
-  const data = snapshot.data();
-  const fileName = data?.fileName;
-  const userId = data?.ownerId;
-
-  if (!fileName || !userId) return;
-
-  try {
-    const bucket = admin.storage().bucket();
-    const possiblePaths = [
-      `knowledge/${userId}/${fileName}`,
-      `knowledge/${userId}/v1_${fileName}`
-    ];
-
-    for (const storagePath of possiblePaths) {
-      const file = bucket.file(storagePath);
-      const [exists] = await file.exists();
-      if (exists) {
-        await file.delete();
-        console.log(`Deleted file: ${storagePath}`);
+    try {
+      const bucket = admin.storage().bucket();
+      const paths = [`knowledge/${data.ownerId}/${data.fileName}`, `knowledge/${data.ownerId}/v1_${data.fileName}`];
+      for (const p of paths) {
+        const file = bucket.file(p);
+        if ((await file.exists())[0]) await file.delete();
       }
+
+      const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
+      const index = pc.index("mergepoint-index");
+      const query = await index.query({ 
+        vector: Array(768).fill(0), 
+        filter: { ownerId: data.ownerId, source: { "$in": [data.fileName, `v1_${data.fileName}`] } }, 
+        topK: 1000 
+      });
+
+      const ids = query.matches.map(m => m.id);
+      if (ids.length) await index.deleteMany(ids);
+    } catch (error) {
+      console.error("CLEANUP ERROR:", error.message);
     }
-
-    const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
-    const index = pc.index("mergepoint-index");
-
-    const queryResponse = await index.query({
-      vector: Array(768).fill(0), 
-      filter: {
-        ownerId: userId,
-        source: { "$in": [fileName, `v1_${fileName}`] }
-      },
-      topK: 1000,
-      includeMetadata: false
-    });
-
-    const ids = queryResponse.matches.map(m => m.id);
-    if (ids.length > 0) {
-        await index.deleteMany(ids);
-        console.log(`Cleaned up ${ids.length} vectors for ${fileName}`);
-    }
-  } catch (error) {
-    console.error("CLEANUP ERROR:", error.message);
   }
-});
+);
