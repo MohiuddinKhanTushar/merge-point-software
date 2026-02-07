@@ -1615,3 +1615,61 @@ tr:hover {
     gap: 8px;
     white-space: nowrap;
 }
+
+/* --- REVIEWER WORKSPACE SPECIFICS --- */
+
+.review-page #review-editor {
+    width: 100%;
+    flex-grow: 1;
+    padding: 2rem;
+    border: none;
+    resize: none;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: #334155;
+    background: white;
+}
+
+.review-page #review-editor:focus {
+    outline: none;
+}
+
+.sections-menu .question-item {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sections-menu .question-item:hover {
+    background: #f1f5f9;
+}
+
+.sections-menu .question-item.active {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-pending { background: #cbd5e1; }
+.status-approved { background: #10b981; }
+.status-flagged { background: #ef4444; }
+
+.action-buttons-group {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+}
