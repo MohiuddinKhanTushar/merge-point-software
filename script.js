@@ -173,7 +173,7 @@ function loadActiveBids(userId) {
     const bidsQuery = query(
         collection(firestore, "bids"), 
         where("ownerId", "==", userId),
-        where("status", "in", ["drafting", "review", "scoping"])
+        where("status", "in", ["drafting", "review", "scoping", "approved"])
     );
 
     onSnapshot(bidsQuery, (snapshot) => {

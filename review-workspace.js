@@ -72,22 +72,19 @@ document.getElementById('approve-single-btn').addEventListener('click', async ()
     const updatedSections = [...currentBidData.sections];
     updatedSections[activeSectionIndex].status = 'approved';
     updatedSections[activeSectionIndex].draftAnswer = document.getElementById('review-editor').value;
+    updatedSections[activeSectionIndex].managerNotes = "";
 
     try {
         await updateDoc(doc(db, "bids", bidId), { sections: updatedSections });
         
-        // Notify Bidder
         await addDoc(collection(db, "notifications"), {
             recipientId: currentBidData.ownerId,
-            recipientEmail: "", // Bidder logic uses UID
             type: "approval",
             message: `Section Approved in ${currentBidData.bidName}`,
             bidId: bidId,
             read: false,
             createdAt: new Date()
         });
-
-        console.log("Section Approved & Notified");
     } catch (e) {
         console.error("Approval failed", e);
     }
@@ -97,16 +94,18 @@ document.getElementById('approve-single-btn').addEventListener('click', async ()
 document.getElementById('reject-btn').addEventListener('click', async () => {
     if (activeSectionIndex === null) return alert("Select a question first.");
     
+    const notes = prompt("Please provide instructions for the re-write:");
+    if (notes === null) return; 
+
     const updatedSections = [...currentBidData.sections];
     updatedSections[activeSectionIndex].status = 'flagged';
+    updatedSections[activeSectionIndex].managerNotes = notes;
 
     try {
         await updateDoc(doc(db, "bids", bidId), { sections: updatedSections });
         
-        // Notify Bidder
         await addDoc(collection(db, "notifications"), {
             recipientId: currentBidData.ownerId,
-            recipientEmail: "",
             type: "flag",
             message: `Section Flagged for Rewrite: ${currentBidData.bidName}`,
             bidId: bidId,
@@ -114,35 +113,45 @@ document.getElementById('reject-btn').addEventListener('click', async () => {
             createdAt: new Date()
         });
 
-        alert("Marked for rewrite. The bidder will be notified.");
+        alert("Marked for rewrite.");
     } catch (e) {
         console.error("Flagging failed", e);
     }
 });
 
-// FINALIZE ENTIRE TENDER
+// UPDATED: APPROVE ENTIRE TENDER (Notify User only)
 document.getElementById('finalize-bid-btn').addEventListener('click', async () => {
-    const confirmFinal = confirm("Are you sure? This will move the tender to the RFP Library (Archive) as 'Completed'.");
+    // 1. Check if all sections are approved
+    const allApproved = currentBidData.sections.every(s => s.status === 'approved');
+    
+    if (!allApproved) {
+        return alert("Cannot approve the full tender yet. Some sections are still pending or flagged.");
+    }
+
+    const confirmFinal = confirm("All sections are approved! Would you like to notify the user to prepare for final submission?");
+    
     if (confirmFinal) {
         try {
+            // Update status to 'approved' or 'ready_to_send' so user knows it's done
             await updateDoc(doc(db, "bids", bidId), { 
-                status: 'completed',
-                completedAt: new Date()
+                status: 'approved',
+                managerApprovedAt: new Date()
             });
 
-            // Notify Bidder of completion
+            // Notify the Bidder/User
             await addDoc(collection(db, "notifications"), {
                 recipientId: currentBidData.ownerId,
-                type: "completion",
-                message: `Tender Finalized: ${currentBidData.bidName}`,
+                type: "full_approval",
+                message: `🎉 Great news! ${currentBidData.bidName} has been fully approved. You can now perform the final submission.`,
                 bidId: bidId,
                 read: false,
                 createdAt: new Date()
             });
 
-            window.location.href = 'archive.html';
+            alert("User has been notified that the tender is fully approved.");
+            window.location.href = 'team-hub.html';
         } catch (e) {
-            alert("Error finalizing: " + e.message);
+            alert("Error: " + e.message);
         }
     }
 });

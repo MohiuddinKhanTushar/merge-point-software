@@ -516,7 +516,8 @@ body {
 }
 
 .status-tag.drafting { background: #fef3c7; color: #92400e; }
-.status-tag.review { background: #dcfce7; color: #166534; }
+.status-tag.review { background: #e0e7ff; color: #4338ca; }
+.status-tag.approved { background: #dcfce7; color: #15803d; }
 
 .deadline { color: #64748b; font-size: 0.85rem; }
 
