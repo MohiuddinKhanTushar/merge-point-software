@@ -1,7 +1,7 @@
 import { initSidebar } from './ui-manager.js';
 import { db, auth, app } from './firebase-config.js';
 import { checkAuthState } from './auth.js'; 
-import { doc, onSnapshot, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, onSnapshot, updateDoc, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
 // Initialize Sidebar
@@ -95,7 +95,7 @@ async function loadReviewerDropdown() {
 
     const select = document.createElement('select');
     select.id = 'reviewer-select';
-    select.className = "reviewer-dropdown-style"; // Ensure this class exists in your CSS or style it manually
+    select.className = "reviewer-dropdown-style";
     select.style.cssText = "width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;";
 
     const defaultOpt = document.createElement('option');
@@ -134,10 +134,23 @@ document.getElementById('confirm-submit-btn').onclick = async () => {
 
     try {
         const bidRef = doc(db, "bids", bidId);
+        
+        // 1. Update Bid Status
         await updateDoc(bidRef, {
             status: "review",
             assignedReviewer: reviewerEmail,
             submittedAt: new Date()
+        });
+
+        // 2. Create Notification for Manager
+        await addDoc(collection(db, "notifications"), {
+            recipientEmail: reviewerEmail,
+            recipientId: "", // Logic in ui-manager.js handles email-based recipients
+            type: "submission",
+            message: `New tender submitted: ${currentBidData.bidName || 'Untitled'}`,
+            bidId: bidId,
+            read: false,
+            createdAt: new Date()
         });
 
         showToast("Tender submitted successfully!");
