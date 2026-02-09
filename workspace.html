@@ -7,9 +7,9 @@
     <link rel="stylesheet" href="style.css">
     
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <style>
-        /* Specific styling for the Manager's Flagged Status */
         .status-flagged {
             background-color: #fee2e2 !important;
             color: #ef4444 !important;
@@ -20,19 +20,19 @@
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        .spin { animation: rotate 2s linear infinite; }
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
 
     <script>
-    // This runs INSTANTLY before the rest of the page loads
     (function() {
         const savedName = localStorage.getItem('userDisplayName');
         const savedInitial = localStorage.getItem('userInitial');
-        
         if (savedName && savedInitial) {
             const checkExist = setInterval(function() {
                 const nameEl = document.getElementById('display-name');
                 const avatarEl = document.getElementById('avatar-circle');
-                
                 if (nameEl && avatarEl) {
                     nameEl.textContent = savedName;
                     avatarEl.textContent = savedInitial;
@@ -105,7 +105,10 @@
                     </div>
                     
                     <div class="header-actions">
-                        <button class="btn-secondary-outline" id="save-bid-btn" onclick="saveActiveSection()">
+                        <button class="btn-secondary-outline" id="download-pdf-btn" style="display: none; gap: 8px;">
+                            <i data-lucide="file-down"></i> Export PDF
+                        </button>
+                        <button class="btn-secondary-outline" id="save-bid-btn">
                             <i data-lucide="save"></i> Save Section
                         </button>
                         <button class="btn-primary" id="submit-review-btn">

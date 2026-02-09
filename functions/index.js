@@ -103,12 +103,9 @@ exports.generateSectionDraft = onCall(
 
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      
-      // FIXED: Switched to stable gemini-embedding-001
       const embedModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-      // Generate embedding with explicit 768 dimensions to match your Pinecone Index
       const embedding = await embedModel.embedContent({
         content: { parts: [{ text: question }] },
         taskType: "RETRIEVAL_QUERY",
@@ -121,7 +118,11 @@ exports.generateSectionDraft = onCall(
       const queryResponse = await index.query({
         vector: embedding.embedding.values,
         topK: 8,
-        filter: { ownerId: userId },
+        // UPDATED: Filter out branding categories to be safe
+        filter: { 
+            ownerId: userId,
+            category: { "$nin": ["title-page", "contact-page"] } 
+        },
         includeMetadata: true
       });
 
@@ -162,7 +163,8 @@ exports.processMasterDocument = onObjectFinalized(
   { region: "us-east1", secrets: [geminiApiKey, pineconeApiKey], timeoutSeconds: 300, memory: "1GiB" },
   async (event) => {
     const filePath = event.data.name;
-    if (!filePath?.toLowerCase().includes("knowledge/") || !filePath.toLowerCase().endsWith(".pdf")) return;
+    // Branding might be images, while knowledge is PDF. We check path first.
+    if (!filePath?.toLowerCase().includes("knowledge/")) return;
 
     const bucket = admin.storage().bucket(event.data.bucket);
     const pathParts = filePath.split("/");
@@ -173,9 +175,20 @@ exports.processMasterDocument = onObjectFinalized(
       const db = getDb();
       const snap = await db.collection("knowledge").where("ownerId", "==", userId).get();
       const metaDoc = snap.docs.find(d => fileName.includes(d.data().fileName));
+      const metaData = metaDoc?.data();
       
-      const category = metaDoc?.data()?.category || "master";
-      const priority = metaDoc?.data()?.priority || 1;
+      const category = metaData?.category || "master";
+      const priority = metaData?.priority || 1;
+
+      // NEW LOGIC: Skip Pinecone if it's a branding asset
+      if (metaData?.excludeFromAI === true || ["title-page", "contact-page"].includes(category)) {
+        console.log("Branding asset detected. Skipping vectorization.");
+        if (metaDoc) await metaDoc.ref.update({ status: "ready" });
+        return;
+      }
+
+      // Only process PDFs for Pinecone
+      if (!filePath.toLowerCase().endsWith(".pdf")) return;
 
       const tempFilePath = path.join("/tmp", fileName);
       await bucket.file(filePath).download({ destination: tempFilePath });
@@ -225,22 +238,24 @@ exports.cleanupKnowledgeBase = onDocumentDeleted(
 
     try {
       const bucket = admin.storage().bucket();
-      const paths = [`knowledge/${data.ownerId}/${data.fileName}`, `knowledge/${data.ownerId}/v1_${data.fileName}`];
-      for (const p of paths) {
-        const file = bucket.file(p);
-        if ((await file.exists())[0]) await file.delete();
+      // Storage Cleanup
+      const storagePath = `knowledge/${data.ownerId}/${data.fileName}`;
+      const file = bucket.file(storagePath);
+      if ((await file.exists())[0]) await file.delete();
+
+      // Pinecone Cleanup (Only if it was an AI-indexed document)
+      if (data.excludeFromAI !== true) {
+        const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
+        const index = pc.index("mergepoint-index");
+        const query = await index.query({ 
+          vector: Array(768).fill(0), 
+          filter: { ownerId: data.ownerId, source: data.fileName }, 
+          topK: 1000 
+        });
+
+        const ids = query.matches.map(m => m.id);
+        if (ids.length) await index.deleteMany(ids);
       }
-
-      const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
-      const index = pc.index("mergepoint-index");
-      const query = await index.query({ 
-        vector: Array(768).fill(0), 
-        filter: { ownerId: data.ownerId, source: { "$in": [data.fileName, `v1_${data.fileName}`] } }, 
-        topK: 1000 
-      });
-
-      const ids = query.matches.map(m => m.id);
-      if (ids.length) await index.deleteMany(ids);
     } catch (error) {
       console.error("CLEANUP ERROR:", error.message);
     }

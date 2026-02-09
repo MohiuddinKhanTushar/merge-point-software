@@ -1,23 +1,17 @@
 import { initSidebar } from './ui-manager.js';
 import { storage, db } from './firebase-config.js'; 
 import { checkAuthState } from './auth.js'; 
-import { ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { 
-    collection, 
-    addDoc, 
-    onSnapshot, 
-    query, 
-    where, 
-    getDocs, 
-    serverTimestamp, 
-    doc,         
-    deleteDoc    
+    collection, addDoc, onSnapshot, query, where, getDocs, 
+    serverTimestamp, doc, deleteDoc, updateDoc, getDoc 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Initialize Sidebar
+// Ensure PDF.js worker is correctly pointed to
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
 initSidebar();
 
-// 1. Selectors
 const libraryGrid = document.getElementById('library-grid');
 const fileInput = document.getElementById('knowledge-file-input');
 const progressContainer = document.getElementById('knowledge-progress-container');
@@ -27,16 +21,30 @@ const uploadTrigger = document.getElementById('knowledge-upload-trigger');
 const uploadSection = document.getElementById('knowledge-upload-section');
 const categorySelect = document.getElementById('doc-category');
 
-// 2. Auth Guard & Initialization
-checkAuthState((user) => {
+// Global Mapper State
+let activeField = null;
+let currentMappings = {};
+let activeDocId = null;
+
+checkAuthState(async (user) => {
     if (user) {
-        console.log("Knowledge Base active for:", user.email);
-        loadLibrary(user.uid);
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+        const isAdmin = userData?.role === 'admin';
+
+        const roleEl = document.getElementById('display-role');
+        if (roleEl) roleEl.textContent = userData?.role || 'User';
+
+        if (isAdmin && uploadTrigger) {
+            uploadTrigger.style.display = 'block';
+        }
+
+        loadLibrary(user.uid, isAdmin);
         setupUpload(user.uid);
     }
 });
 
-// 3. Toggle Upload Section
 if (uploadTrigger && uploadSection) {
     uploadSection.style.display = 'none';
     uploadTrigger.addEventListener('click', () => {
@@ -44,7 +52,21 @@ if (uploadTrigger && uploadSection) {
     });
 }
 
-// 4. Handle Upload Logic
+/**
+ * Helper to delete file from Firebase Storage using its download URL
+ */
+async function deleteFileFromStorage(fileUrl) {
+    if (!fileUrl) return;
+    try {
+        // Create a reference from the URL
+        const fileRef = ref(storage, fileUrl);
+        await deleteObject(fileRef);
+        console.log("File deleted from storage bucket.");
+    } catch (error) {
+        console.error("Storage deletion failed:", error);
+    }
+}
+
 function setupUpload(userId) {
     if (!fileInput) return;
 
@@ -56,22 +78,30 @@ function setupUpload(userId) {
         const categoryValue = selectedOption.value; 
         const categoryLabel = selectedOption.text;
         const priorityLevel = parseInt(selectedOption.getAttribute('data-priority'));
+        const isBranding = ['title-page', 'contact-page'].includes(categoryValue);
 
         progressContainer.style.display = 'block';
         statusText.innerText = `Preparing ${categoryLabel}...`;
 
         try {
-            const q = query(
-                collection(db, "knowledge"), 
-                where("ownerId", "==", userId),
-                where("fileName", "==", file.name)
-            );
+            // Delete old branding of the same category (Sync delete for storage)
+            if (isBranding) {
+                const qB = query(collection(db, "knowledge"), where("ownerId", "==", userId), where("category", "==", categoryValue));
+                const existingB = await getDocs(qB);
+                for (const d of existingB.docs) {
+                    const data = d.data();
+                    await deleteFileFromStorage(data.fileUrl); // Remove from Storage
+                    await deleteDoc(doc(db, "knowledge", d.id)); // Remove from Firestore
+                }
+            }
+
+            const q = query(collection(db, "knowledge"), where("ownerId", "==", userId), where("fileName", "==", file.name));
             const versionSnap = await getDocs(q);
             const nextVersion = versionSnap.size + 1;
 
-            statusText.innerText = `Uploading Version ${nextVersion}...`;
-
-            const storageRef = ref(storage, `knowledge/${userId}/v${nextVersion}_${file.name}`);
+            // Storage Path Logic
+            const storagePath = `knowledge/${userId}/${isBranding ? 'branding' : 'v'+nextVersion}_${file.name}`;
+            const storageRef = ref(storage, storagePath);
             const uploadTask = uploadBytesResumable(storageRef, file);
 
             uploadTask.on('state_changed', 
@@ -79,24 +109,21 @@ function setupUpload(userId) {
                     const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
                     progressFill.style.width = progress + '%';
                 }, 
-                (error) => {
-                    console.error("Upload error:", error);
-                    alert("Upload failed.");
-                }, 
+                (error) => { console.error(error); alert("Upload failed."); }, 
                 async () => {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-                    // SAVING METADATA: Including priority and isOverride for the AI
-                    await addDoc(collection(db, "knowledge"), {
+                    const docRef = await addDoc(collection(db, "knowledge"), {
                         ownerId: userId,
-                        orgId: "default-org", 
                         fileName: file.name,
                         fileUrl: downloadURL,
+                        storagePath: storagePath, // Storing path for easier future deletions
                         version: nextVersion,
                         category: categoryValue,
                         priority: priorityLevel,
-                        isOverride: categoryValue === 'update', // True for product updates
-                        status: "processing", 
+                        isOverride: categoryValue === 'update',
+                        excludeFromAI: isBranding,
+                        status: isBranding ? "ready" : "processing", 
                         uploadedAt: serverTimestamp()
                     });
 
@@ -104,87 +131,81 @@ function setupUpload(userId) {
                         progressContainer.style.display = 'none';
                         progressFill.style.width = '0%';
                         uploadSection.style.display = 'none'; 
-                        alert(`Successfully added to your library as ${categoryLabel}.`);
+                        
+                        if (categoryValue === 'title-page') {
+                            openTemplateMapper(downloadURL, docRef.id);
+                        } else {
+                            alert(`${categoryLabel} successfully updated.`);
+                        }
                     }, 1000);
                 }
             );
-        } catch (error) {
-            console.error("Setup error:", error);
-        }
+        } catch (error) { console.error(error); }
     };
 }
 
-// 5. Load Library
-function loadLibrary(userId) {
+function loadLibrary(userId, isAdmin) {
     if (!libraryGrid) return;
-
     const q = query(collection(db, "knowledge"), where("ownerId", "==", userId));
 
     onSnapshot(q, (snapshot) => {
         libraryGrid.innerHTML = ''; 
-
         if (snapshot.empty) {
-            libraryGrid.innerHTML = `
-                <div class="loading-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem;">
-                    <p>Your library is empty. Upload a document to get started.</p>
-                </div>`;
+            libraryGrid.innerHTML = `<div class="loading-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem;"><p>Your library is empty.</p></div>`;
             return;
         }
 
         snapshot.forEach((snapshotDoc) => {
             const data = snapshotDoc.data();
             const docId = snapshotDoc.id;
-            const dateStr = data.uploadedAt?.toDate ? data.uploadedAt.toDate().toLocaleDateString() : 'New Document';
+            const dateStr = data.uploadedAt?.toDate ? data.uploadedAt.toDate().toLocaleDateString() : 'Active';
+            const isTitlePage = data.category === 'title-page';
             
-            let finalCategory = data.category;
-            if (!finalCategory && data.type === "master-document") {
-                finalCategory = "master";
-            } else if (!finalCategory) {
-                finalCategory = "unknown";
-            }
-
             const tagColors = {
-                master: '#4f46e5',      // Indigo
-                update: '#059669',      // Emerald/Green
-                policy: '#ca8a04',      // Yellow/Orange
-                'case-study': '#db2777' // Pink
+                master: '#4f46e5',
+                update: '#059669',
+                policy: '#ca8a04',
+                'case-study': '#db2777',
+                'title-page': '#8b5cf6',
+                'contact-page': '#8b5cf6'
             };
 
-            const currentTagColor = tagColors[finalCategory] || '#64748b';
-            const displayCategory = finalCategory.replace('-', ' ').toUpperCase();
-            
-            // Visual enhancement for priority documents
-            const isHighPriority = data.priority >= 4;
+            const currentTagColor = tagColors[data.category] || '#64748b';
+            const isBranding = data.excludeFromAI === true;
 
             const cardHtml = `
-                <div class="bid-card ${isHighPriority ? 'priority-card' : ''}" id="card-${docId}">
+                <div class="bid-card" id="card-${docId}">
                     <div class="bid-status-row">
                         <span class="status-tag" style="background: ${currentTagColor} !important; color: white !important; border: none !important;">
-                            ${displayCategory}
+                            ${data.category.replace('-', ' ').toUpperCase()}
                         </span>
                         <span class="deadline">${dateStr}</span>
                     </div>
                     <div class="bid-info">
                         <h3>${data.fileName}</h3>
                         <p class="client-name">
-                            <strong>v${data.version || 1}</strong> • 
-                            AI Priority: ${data.priority || (finalCategory === 'master' ? 1 : 0)}
-                            ${isHighPriority ? ' <span style="color:#059669;">● Override Active</span>' : ''}
+                            ${isBranding ? '<strong>Format Asset</strong>' : `<strong>v${data.version || 1}</strong> • AI Priority: ${data.priority}`}
                         </p>
                     </div>
                     <div class="bid-footer" style="margin-top: 1.5rem; display: flex; gap: 0.5rem;">
-                        <button class="btn-outline" style="flex: 3;" onclick="window.open('${data.fileUrl}', '_blank')">
-                            View Document
-                        </button>
-                        <button class="btn-outline delete-btn" style="flex: 1; border-color: #ff4d4d; color: #ff4d4d;" data-id="${docId}">
-                            <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
-                        </button>
+                        ${isTitlePage && isAdmin ? `
+                            <button class="btn-outline" style="flex: 2; border-color: #4f46e5; color: #4f46e5;" onclick="window.triggerMapper('${data.fileUrl}', '${docId}')">
+                                Map Template
+                            </button>
+                        ` : ''}
+                        <button class="btn-outline" style="flex: 1;" onclick="window.open('${data.fileUrl}', '_blank')">View</button>
+                        ${isAdmin ? `
+                            <button class="btn-outline delete-btn" style="flex: 1; border-color: #ff4d4d; color: #ff4d4d;" 
+                                data-id="${docId}" 
+                                data-url="${data.fileUrl}">
+                                <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                            </button>
+                        ` : ''}
                     </div>
                 </div>`;
             libraryGrid.insertAdjacentHTML('beforeend', cardHtml);
         });
-
-        if (window.lucide) lucide.createIcons({ root: libraryGrid });
+        if (window.lucide) lucide.createIcons();
         attachDeleteListeners();
     });
 }
@@ -193,13 +214,99 @@ function attachDeleteListeners() {
     document.querySelectorAll('.delete-btn').forEach(button => {
         button.onclick = async (e) => {
             const id = e.currentTarget.getAttribute('data-id');
-            if (confirm("Delete this document? This will remove it from the AI's knowledge base.")) {
+            const fileUrl = e.currentTarget.getAttribute('data-url');
+            
+            if (confirm("Permanently delete this document and its file?")) {
                 try {
+                    // 1. Delete from Firebase Storage
+                    await deleteFileFromStorage(fileUrl);
+                    
+                    // 2. Delete from Firestore
                     await deleteDoc(doc(db, "knowledge", id));
-                } catch (err) {
-                    console.error("Error:", err);
+                    
+                    console.log("Sync delete successful.");
+                } catch (err) { 
+                    console.error("Delete sequence failed:", err); 
+                    alert("Error deleting document. Check console.");
                 }
             }
         };
     });
 }
+
+// --- TEMPLATE MAPPER FUNCTIONS ---
+
+window.triggerMapper = openTemplateMapper;
+
+async function openTemplateMapper(url, docId) {
+    activeDocId = docId;
+    currentMappings = {};
+    document.querySelectorAll('.coord-tag').forEach(t => t.innerText = "Not Set");
+    document.getElementById('mapper-modal').style.display = 'block';
+
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        
+        const canvas = document.getElementById('pdf-canvas');
+        const context = canvas.getContext('2d');
+        
+        const viewport = page.getViewport({ scale: 1.2 });
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+        document.querySelectorAll('.field-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.field-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activeField = btn.getAttribute('data-field');
+            };
+        });
+
+        canvas.onclick = (e) => {
+            if (!activeField) return alert("Please select a field button on the right first!");
+            const rect = canvas.getBoundingClientRect();
+            const xPercent = (e.clientX - rect.left) / canvas.width;
+            const yPercent = (e.clientY - rect.top) / canvas.height;
+            currentMappings[activeField] = { x: xPercent, y: yPercent };
+            document.getElementById(`tag-${activeField}`).innerText = "Position Set";
+            
+            context.fillStyle = "#4f46e5";
+            context.beginPath();
+            context.arc(e.clientX - rect.left, e.clientY - rect.top, 5, 0, Math.PI * 2);
+            context.fill();
+        };
+    } catch (err) {
+        console.error("PDF Mapping Error:", err);
+        alert("Failed to load PDF preview.");
+    }
+}
+
+document.getElementById('save-mapping-btn').onclick = async () => {
+    if (Object.keys(currentMappings).length < 3) return alert("Please set positions for all 3 fields.");
+    
+    const fontSettings = {
+        family: document.getElementById('map-font-family').value,
+        size: parseInt(document.getElementById('map-font-size').value) || 20
+    };
+
+    try {
+        await updateDoc(doc(db, "knowledge", activeDocId), { 
+            mapping: currentMappings,
+            fontStyle: fontSettings
+        });
+        alert("Template Mapping & Styles Saved!");
+        document.getElementById('mapper-modal').style.display = 'none';
+    } catch (e) {
+        alert("Error saving: " + e.message);
+    }
+};
+
+document.getElementById('close-mapper').onclick = () => document.getElementById('mapper-modal').style.display = 'none';

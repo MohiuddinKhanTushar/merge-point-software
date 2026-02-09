@@ -6,37 +6,31 @@
     <title>MergePoint | AI RFP Platform</title>
     <link rel="stylesheet" href="style.css">
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    
+
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <script>
-    // This runs INSTANTLY before the rest of the page loads
+    // Fast UI Initialization
     (function() {
         const savedName = localStorage.getItem('userDisplayName');
         const savedInitial = localStorage.getItem('userInitial');
-        
         if (savedName && savedInitial) {
-            // We use a small interval just to ensure the DOM elements exist
             const checkExist = setInterval(function() {
                 const nameEl = document.getElementById('display-name');
                 const avatarEl = document.getElementById('avatar-circle');
-                
                 if (nameEl && avatarEl) {
                     nameEl.textContent = savedName;
                     avatarEl.textContent = savedInitial;
                     clearInterval(checkExist);
                 }
-            }, 5); // Checks every 5ms
+            }, 5);
         }
+        const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+        if (isCollapsed) document.documentElement.classList.add('sidebar-is-collapsed');
     })();
-</script>
-
-    <script>
-        (function() {
-            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
-            if (isCollapsed) {
-                document.documentElement.classList.add('sidebar-is-collapsed');
-            }
-        })();
     </script>
 </head>
 <body>
@@ -44,10 +38,10 @@
     <div class="dashboard-container">
         <nav class="sidebar" id="sidebar">
             <div class="logo">
-    <a href="dashboard.html">
-        <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
-    </a>
-</div>
+                <a href="dashboard.html">
+                    <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+                </a>
+            </div>
             <button id="sidebar-toggle" class="toggle-btn">
                 <i data-lucide="chevron-left"></i>
             </button>
@@ -64,17 +58,17 @@
 
             <div class="sidebar-footer">
                 <div class="user-profile-mini">
-        <div class="avatar" id="avatar-circle">?</div>
-        <div class="user-info">
-            <span class="user-name" id="display-name">Loading...</span>
-            <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
-        </div>
-    </div>
-    <ul class="nav-links logout-nav">
-        <li>
-            <a href="#" id="logout-btn" class="logout-link">
-                <i data-lucide="log-out"></i> <span>Logout</span>
-            </a>
+                    <div class="avatar" id="avatar-circle">?</div>
+                    <div class="user-info">
+                        <span class="user-name" id="display-name">Loading...</span>
+                        <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
+                    </div>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
                     </li>
                 </ul>
             </div>
@@ -144,10 +138,9 @@
                 <div class="section-header" style="margin-bottom: 1.5rem;">
                     <h2 style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">Recent Projects</h2>
                 </div>
-                <div class="bids-grid">
-                    </div>
+                <div class="bids-grid"></div>
             </section>
-            </main>
+        </main>
     </div>
 
     <div id="confirm-modal" class="modal">
@@ -157,7 +150,6 @@
             </div>
             <h2 id="confirm-title">Are you sure?</h2>
             <p id="confirm-message" style="color: #64748b; margin-bottom: 2rem;">This action cannot be undone easily.</p>
-            
             <div style="display: flex; gap: 12px;">
                 <button class="btn-secondary-outline" style="flex: 1;" onclick="closeConfirmModal()">Cancel</button>
                 <button id="confirm-action-btn" class="btn-hero" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Confirm</button>
@@ -165,8 +157,7 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script>lucide.createIcons();</script>
+    <div id="toast-container"></div>
     <script type="module" src="script.js"></script>
 </body>
 </html>
