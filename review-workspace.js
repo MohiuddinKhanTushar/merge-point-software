@@ -1,4 +1,4 @@
-import { initSidebar } from './ui-manager.js';
+import { initSidebar, showAlert, showConfirm, showPrompt } from './ui-manager.js';
 import { db, auth, app } from './firebase-config.js';
 import { checkAuthState } from './auth.js'; 
 import { doc, onSnapshot, updateDoc, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -41,6 +41,7 @@ checkAuthState((user) => {
 // Render the sidebar list for the Manager
 function renderReviewQuestions(sections) {
     const container = document.getElementById('review-questions-list');
+    if (!container) return;
     container.innerHTML = "";
 
     sections.forEach((section, index) => {
@@ -67,7 +68,9 @@ function renderReviewQuestions(sections) {
 
 // APPROVE SINGLE QUESTION
 document.getElementById('approve-single-btn').addEventListener('click', async () => {
-    if (activeSectionIndex === null) return alert("Select a question first.");
+    if (activeSectionIndex === null) {
+        return showAlert("Selection Required", "Please select a question from the list first.");
+    }
     
     const updatedSections = [...currentBidData.sections];
     updatedSections[activeSectionIndex].status = 'approved';
@@ -85,17 +88,27 @@ document.getElementById('approve-single-btn').addEventListener('click', async ()
             read: false,
             createdAt: new Date()
         });
+        showAlert("Section Approved", "The user has been notified of this approval.");
     } catch (e) {
         console.error("Approval failed", e);
+        showAlert("Error", "Could not approve section: " + e.message);
     }
 });
 
 // FLAG FOR REWRITE
 document.getElementById('reject-btn').addEventListener('click', async () => {
-    if (activeSectionIndex === null) return alert("Select a question first.");
+    if (activeSectionIndex === null) {
+        return showAlert("Selection Required", "Please select a question from the list first.");
+    }
     
-    const notes = prompt("Please provide instructions for the re-write:");
-    if (notes === null) return; 
+    // REPLACED: browser prompt replaced with your custom showPrompt modal
+    const notes = await showPrompt(
+        "Instructions for Re-write", 
+        "What specific changes or improvements should the bidder make?"
+    );
+    
+    // notes will be null if the user clicks "Cancel" in your custom modal
+    if (notes === null || notes.trim() === "") return; 
 
     const updatedSections = [...currentBidData.sections];
     updatedSections[activeSectionIndex].status = 'flagged';
@@ -113,32 +126,35 @@ document.getElementById('reject-btn').addEventListener('click', async () => {
             createdAt: new Date()
         });
 
-        alert("Marked for rewrite.");
+        showAlert("Flagged", "Section marked for rewrite. The user has been notified.");
     } catch (e) {
         console.error("Flagging failed", e);
+        showAlert("Error", "Could not flag section: " + e.message);
     }
 });
 
-// UPDATED: APPROVE ENTIRE TENDER (Notify User only)
+// APPROVE ENTIRE TENDER
 document.getElementById('finalize-bid-btn').addEventListener('click', async () => {
     // 1. Check if all sections are approved
     const allApproved = currentBidData.sections.every(s => s.status === 'approved');
     
     if (!allApproved) {
-        return alert("Cannot approve the full tender yet. Some sections are still pending or flagged.");
+        return showAlert("Action Blocked", "Cannot approve the full tender yet. Some sections are still pending or flagged.");
     }
 
-    const confirmFinal = confirm("All sections are approved! Would you like to notify the user to prepare for final submission?");
+    const confirmFinal = await showConfirm(
+        "Finalize Approval?", 
+        "All sections are approved! Notify the user to prepare for final submission?",
+        "Notify User"
+    );
     
     if (confirmFinal) {
         try {
-            // Update status to 'approved' or 'ready_to_send' so user knows it's done
             await updateDoc(doc(db, "bids", bidId), { 
                 status: 'approved',
                 managerApprovedAt: new Date()
             });
 
-            // Notify the Bidder/User
             await addDoc(collection(db, "notifications"), {
                 recipientId: currentBidData.ownerId,
                 type: "full_approval",
@@ -148,10 +164,12 @@ document.getElementById('finalize-bid-btn').addEventListener('click', async () =
                 createdAt: new Date()
             });
 
-            alert("User has been notified that the tender is fully approved.");
-            window.location.href = 'team-hub.html';
+            showAlert("Success", "User has been notified that the tender is fully approved.");
+            setTimeout(() => {
+                window.location.href = 'team-hub.html';
+            }, 1500);
         } catch (e) {
-            alert("Error: " + e.message);
+            showAlert("Error", "Finalization failed: " + e.message);
         }
     }
 });

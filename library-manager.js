@@ -1,5 +1,5 @@
 import { db, auth } from './firebase-config.js';
-import { initSidebar } from './ui-manager.js';
+import { initSidebar, showAlert, showConfirm } from './ui-manager.js';
 import { logoutUser } from './auth.js';
 import { 
     collection, 
@@ -14,10 +14,9 @@ import {
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-initSidebar();
-
-let allArchiveData = []; // Local cache for searching/filtering
-let currentProjectId = null; // Track which project is open in the modal
+// Global cache for searching/filtering
+let allArchiveData = []; 
+let currentProjectId = null; 
 
 /**
  * Main entry point for the RFP Library Page
@@ -98,41 +97,41 @@ function renderLibrary(data) {
 
         return `
             <tr>
-        <td><strong>${item.bidName || 'Untitled'}</strong></td>
-        <td>${item.client || 'N/A'}</td>
-        <td><span class="badge">${item.industry || 'General'}</span></td>
-        <td>${dateDisplay}</td> <td><span class="status-pill ${statusClass}">${statusLabel}</span></td> <td style="text-align: right;">
-            <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.viewProject('${item.id}')">
-                    <i data-lucide="eye" style="width:14px; height:14px;"></i> View
-                </button>
-                <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.restoreToActive('${item.id}')">
-                    <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i>
-                </button>
-            </div>
-        </td>
-    </tr>
-`;
+                <td><strong>${item.bidName || 'Untitled'}</strong></td>
+                <td>${item.client || 'N/A'}</td>
+                <td><span class="badge">${item.industry || 'General'}</span></td>
+                <td>${dateDisplay}</td> 
+                <td><span class="status-pill ${statusClass}">${statusLabel}</span></td> 
+                <td style="text-align: right;">
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                        <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.viewProject('${item.id}')">
+                            <i data-lucide="eye" style="width:14px; height:14px;"></i> View
+                        </button>
+                        <button class="btn-secondary-outline" style="padding: 4px 8px;" onclick="window.restoreToActive('${item.id}')">
+                            <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i> Restore
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
     }).join('');
     
     if (window.lucide) window.lucide.createIcons();
 }
 
 /**
- * MODAL LOGIC (CONSOLIDATED)
+ * MODAL LOGIC - View Details
  */
 window.viewProject = (id) => {
     currentProjectId = id;
     const project = allArchiveData.find(p => p.id === id);
     if (!project) return;
 
-    // Fill UI Text
     document.getElementById('modal-project-name').innerText = project.bidName || 'Untitled Project';
     document.getElementById('modal-client').innerText = project.client || 'N/A';
     document.getElementById('modal-industry').innerText = project.industry || 'General';
     document.getElementById('modal-text').innerText = project.summary || "No archived text available.";
 
-    // Set Dropdown Value
     const statusDropdown = document.getElementById('modal-status-select');
     if (statusDropdown) {
         statusDropdown.value = project.outcome || 'pending';
@@ -148,65 +147,56 @@ window.saveProjectStatus = async () => {
     const newStatus = document.getElementById('modal-status-select').value;
     try {
         await updateDoc(doc(db, "archived_rfps", currentProjectId), { outcome: newStatus });
+        showAlert("Updated", "Project status has been updated successfully.");
         window.closeArchiveModal();
     } catch (e) {
         console.error("Error updating status:", e);
+        showAlert("Error", "Could not update status.");
     }
 };
 
 /**
- * RESTORE & CONFIRMATION LOGIC
+ * RESTORE LOGIC - Using Global showConfirm
  */
 window.restoreToActive = async (archiveId) => {
-    window.showCustomConfirm(
+    const confirmed = await showConfirm(
         "Restore to Active?", 
-        "This project will move back to your Dashboard for further editing.", 
-        async () => {
-            try {
-                const archiveRef = doc(db, "archived_rfps", archiveId);
-                const archiveSnap = await getDoc(archiveRef);
-
-                if (archiveSnap.exists()) {
-                    const data = archiveSnap.data();
-                    await addDoc(collection(db, "bids"), {
-                        ...data,
-                        status: "review",
-                        deadline: serverTimestamp(), 
-                        createdAt: serverTimestamp()
-                    });
-                    await deleteDoc(archiveRef);
-                }
-            } catch (e) {
-                console.error("Restore failed:", e);
-            }
-        }
+        "This project will move back to your Dashboard for further editing.",
+        "Restore Project"
     );
+
+    if (confirmed) {
+        try {
+            const archiveRef = doc(db, "archived_rfps", archiveId);
+            const archiveSnap = await getDoc(archiveRef);
+
+            if (archiveSnap.exists()) {
+                const data = archiveSnap.data();
+                await addDoc(collection(db, "bids"), {
+                    ...data,
+                    status: "review",
+                    deadline: serverTimestamp(), 
+                    createdAt: serverTimestamp()
+                });
+                await deleteDoc(archiveRef);
+                showAlert("Success", "Project restored to active dashboard.");
+            }
+        } catch (e) {
+            console.error("Restore failed:", e);
+            showAlert("Error", "Failed to restore project: " + e.message);
+        }
+    }
 };
 
-window.showCustomConfirm = (title, message, onConfirm) => {
-    const modal = document.getElementById('confirm-modal');
-    document.getElementById('confirm-title').innerText = title;
-    document.getElementById('confirm-message').innerText = message;
-    
-    const actionBtn = document.getElementById('confirm-action-btn');
-    const newActionBtn = actionBtn.cloneNode(true);
-    actionBtn.parentNode.replaceChild(newActionBtn, actionBtn);
-    
-    newActionBtn.addEventListener('click', () => {
-        onConfirm();
-        closeConfirmModal();
-    });
-
-    modal.style.display = 'flex';
-    if (window.lucide) lucide.createIcons({ root: modal });
+window.closeArchiveModal = () => { 
+    document.getElementById('archive-modal').style.display = 'none'; 
 };
 
-window.closeConfirmModal = () => { document.getElementById('confirm-modal').style.display = 'none'; };
-window.closeArchiveModal = () => { document.getElementById('archive-modal').style.display = 'none'; };
-
+// Handle clicks outside project detail modal
 window.onclick = function(event) {
     const modal = document.getElementById('archive-modal');
-    const confirmModal = document.getElementById('confirm-modal');
     if (event.target === modal) modal.style.display = "none";
-    if (event.target === confirmModal) confirmModal.style.display = "none";
 };
+
+// Initialize the library
+initLibrary();

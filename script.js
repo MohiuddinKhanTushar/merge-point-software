@@ -1,4 +1,4 @@
-import { initSidebar } from './ui-manager.js';
+import { initSidebar, showConfirm, showAlert } from './ui-manager.js';
 import { db, auth, app } from './firebase-config.js'; 
 import { checkAuthState, logoutUser } from './auth.js';
 import { 
@@ -61,9 +61,9 @@ async function handleCreateBid() {
     const buyerName = document.getElementById('buyer-name')?.value;
     const deadlineValue = document.getElementById('tender-deadline-input')?.value;
 
-    if (!user) return alert("Please log in first!");
-    if (!selectedFile) return alert("Please select a tender document first.");
-    if (!buyerName) return alert("Please enter the Buyer Organisation.");
+    if (!user) return showAlert("Auth Error", "Please log in first!");
+    if (!selectedFile) return showAlert("Missing File", "Please select a tender document first.");
+    if (!buyerName) return showAlert("Missing Info", "Please enter the Buyer Organisation.");
 
     const progressContainer = document.getElementById('progress-container');
     const statusText = document.getElementById('status-text');
@@ -74,7 +74,7 @@ async function handleCreateBid() {
         if (statusText) statusText.innerText = "Verifying Knowledge Base...";
         const hasMasterDoc = await checkMasterDocument(user.uid);
         if (!hasMasterDoc) {
-            alert("Action Required: Please upload your Company Master Document in the Knowledge Base first.");
+            showAlert("Action Required", "Please upload your Company Master Document in the Knowledge Base first.");
             window.location.href = 'knowledge.html';
             return;
         }
@@ -82,7 +82,6 @@ async function handleCreateBid() {
         // STEP B: Generate unique filename and upload
         if (statusText) statusText.innerText = "Uploading tender document...";
         
-        // --- FIX: PATH SANITIZATION & STABLE TIMESTAMP ---
         const timestamp = Date.now();
         const cleanName = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_'); 
         const uniqueFileName = `${timestamp}_${cleanName}`;
@@ -105,7 +104,7 @@ async function handleCreateBid() {
             progress: 10, 
             ownerId: user.uid,
             createdAt: serverTimestamp(),
-            fileName: uniqueFileName, // Matches Storage exactly
+            fileName: uniqueFileName, 
             pdfUrl: downloadUrl 
         });
 
@@ -116,7 +115,7 @@ async function handleCreateBid() {
         const result = await analyzeTender({ 
             bidId: bidDoc.id,
             documentUrl: downloadUrl, 
-            fileName: uniqueFileName // Passing the sanitized name
+            fileName: uniqueFileName 
         });
 
         if (result.data && result.data.success) {
@@ -131,7 +130,7 @@ async function handleCreateBid() {
 
     } catch (e) { 
         console.error("Error creating bid: ", e); 
-        alert("Failed to create bid: " + e.message);
+        showAlert("Error", "Failed to create bid: " + e.message);
         if (progressContainer) progressContainer.style.display = 'none';
     }
 }
@@ -213,16 +212,16 @@ function loadActiveBids(userId) {
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; margin-top: 1rem;">
-    <button class="btn-outline" style="flex: 1;" onclick="window.location.href='/workspace.html?id=${bidId}'">Open Workspace</button>
-    
-    <button class="btn-secondary-outline" title="Archive Bid" onclick="archiveBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center;">
-        <i data-lucide="archive" style="width: 18px; height: 18px;"></i>
-    </button>
+                        <button class="btn-outline" style="flex: 1;" onclick="window.location.href='/workspace.html?id=${bidId}'">Open Workspace</button>
+                        
+                        <button class="btn-secondary-outline" title="Archive Bid" onclick="archiveBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                            <i data-lucide="archive" style="width: 18px; height: 18px;"></i>
+                        </button>
 
-    <button class="btn-secondary-outline delete-btn-hover" title="Delete Permanent" onclick="deleteBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center; color: #ef4444;">
-        <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
-    </button>
-</div>
+                        <button class="btn-secondary-outline delete-btn-hover" title="Delete Permanent" onclick="deleteBid('${bidId}')" style="width: 42px; padding: 0; display: flex; align-items: center; justify-content: center; color: #ef4444;">
+                            <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+                        </button>
+                    </div>
                 </div>
             `;
         });
@@ -243,85 +242,73 @@ async function checkMasterDocument(userId) {
     return !snap.empty; 
 }
 
-// 6. Archive and Modal logic
+// 6. Archive Logic
 async function archiveBid(bidId) {
-    window.showCustomConfirm(
+    const confirmed = await showConfirm(
         "Archive Project?", 
-        "This will move the project to your RFP Library.", 
-        async () => {
-            try {
-                const bidRef = doc(firestore, "bids", bidId);
-                const bidSnap = await getDoc(bidRef);
-
-                if (bidSnap.exists()) {
-                    await addDoc(collection(firestore, "archived_rfps"), {
-                        ...bidSnap.data(),
-                        dateArchived: serverTimestamp()
-                    });
-                    await deleteDoc(bidRef);
-                }
-            } catch (error) { console.error("Archive error:", error); }
-        }
+        "This will move the project to your RFP Library.",
+        "Archive"
     );
+
+    if (confirmed) {
+        try {
+            const bidRef = doc(firestore, "bids", bidId);
+            const bidSnap = await getDoc(bidRef);
+
+            if (bidSnap.exists()) {
+                await addDoc(collection(firestore, "archived_rfps"), {
+                    ...bidSnap.data(),
+                    dateArchived: serverTimestamp()
+                });
+                await deleteDoc(bidRef);
+            }
+        } catch (error) { 
+            console.error("Archive error:", error); 
+            showAlert("Error", "Could not archive the project.");
+        }
+    }
 }
 window.archiveBid = archiveBid;
 
-window.showCustomConfirm = (title, message, onConfirm) => {
-    const modal = document.getElementById('confirm-modal');
-    if (!modal) return;
-    document.getElementById('confirm-title').innerText = title;
-    document.getElementById('confirm-message').innerText = message;
-    const actionBtn = document.getElementById('confirm-action-btn');
-    const newActionBtn = actionBtn.cloneNode(true);
-    actionBtn.parentNode.replaceChild(newActionBtn, actionBtn);
-    newActionBtn.addEventListener('click', () => { onConfirm(); closeConfirmModal(); });
-    modal.style.display = 'flex';
-};
-
-window.closeConfirmModal = () => {
-    const modal = document.getElementById('confirm-modal');
-    if (modal) modal.style.display = 'none';
-};
-
 // 7. Permanent Delete Logic
 async function deleteBid(bidId) {
-    window.showCustomConfirm(
+    const confirmed = await showConfirm(
         "Delete Project Permanently?", 
-        "This will delete the AI analysis and the uploaded PDF from storage. This cannot be undone.", 
-        async () => {
-            try {
-                const user = auth.currentUser;
-                if (!user) return;
-
-                const bidRef = doc(firestore, "bids", bidId);
-                const bidSnap = await getDoc(bidRef);
-
-                if (bidSnap.exists()) {
-                    const data = bidSnap.data();
-                    const fileName = data.fileName;
-
-                    // 1. Delete from Firebase Storage if fileName exists
-                    if (fileName) {
-                        try {
-                            const storagePath = `tenders/${user.uid}/${fileName}`;
-                            const fileRef = ref(storage, storagePath);
-                            await deleteObject(fileRef);
-                            console.log("File deleted from storage");
-                        } catch (storageErr) {
-                            // If file is already gone, we still want to delete the Firestore doc
-                            console.warn("Storage deletion failed or file not found:", storageErr);
-                        }
-                    }
-
-                    // 2. Delete from Firestore
-                    await deleteDoc(bidRef);
-                    console.log("Firestore document deleted");
-                }
-            } catch (error) { 
-                console.error("Delete error:", error);
-                alert("Failed to delete project: " + error.message);
-            }
-        }
+        "This will delete the AI analysis and the uploaded PDF from storage. This cannot be undone.",
+        "Delete"
     );
+
+    if (confirmed) {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const bidRef = doc(firestore, "bids", bidId);
+            const bidSnap = await getDoc(bidRef);
+
+            if (bidSnap.exists()) {
+                const data = bidSnap.data();
+                const fileName = data.fileName;
+
+                // 1. Delete from Firebase Storage
+                if (fileName) {
+                    try {
+                        const storagePath = `tenders/${user.uid}/${fileName}`;
+                        const fileRef = ref(storage, storagePath);
+                        await deleteObject(fileRef);
+                    } catch (storageErr) {
+                        console.warn("Storage deletion failed:", storageErr);
+                    }
+                }
+
+                // 2. Delete from Firestore
+                await deleteDoc(bidRef);
+                console.log("Firestore document deleted");
+            }
+        } catch (error) { 
+            console.error("Delete error:", error); 
+            showAlert("Error", "Failed to delete project: " + error.message);
+        }
+    }
 }
 window.deleteBid = deleteBid;

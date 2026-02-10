@@ -1,4 +1,5 @@
-import { initSidebar } from './ui-manager.js';
+// 1. Updated Import: Added showConfirm and showAlert
+import { initSidebar, showConfirm, showAlert } from './ui-manager.js';
 import { storage, db } from './firebase-config.js'; 
 import { checkAuthState } from './auth.js'; 
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -53,12 +54,11 @@ if (uploadTrigger && uploadSection) {
 }
 
 /**
- * Helper to delete file from Firebase Storage using its download URL
+ * Helper to delete file from Firebase Storage
  */
 async function deleteFileFromStorage(fileUrl) {
     if (!fileUrl) return;
     try {
-        // Create a reference from the URL
         const fileRef = ref(storage, fileUrl);
         await deleteObject(fileRef);
         console.log("File deleted from storage bucket.");
@@ -84,14 +84,13 @@ function setupUpload(userId) {
         statusText.innerText = `Preparing ${categoryLabel}...`;
 
         try {
-            // Delete old branding of the same category (Sync delete for storage)
             if (isBranding) {
                 const qB = query(collection(db, "knowledge"), where("ownerId", "==", userId), where("category", "==", categoryValue));
                 const existingB = await getDocs(qB);
                 for (const d of existingB.docs) {
                     const data = d.data();
-                    await deleteFileFromStorage(data.fileUrl); // Remove from Storage
-                    await deleteDoc(doc(db, "knowledge", d.id)); // Remove from Firestore
+                    await deleteFileFromStorage(data.fileUrl);
+                    await deleteDoc(doc(db, "knowledge", d.id));
                 }
             }
 
@@ -99,7 +98,6 @@ function setupUpload(userId) {
             const versionSnap = await getDocs(q);
             const nextVersion = versionSnap.size + 1;
 
-            // Storage Path Logic
             const storagePath = `knowledge/${userId}/${isBranding ? 'branding' : 'v'+nextVersion}_${file.name}`;
             const storageRef = ref(storage, storagePath);
             const uploadTask = uploadBytesResumable(storageRef, file);
@@ -109,7 +107,10 @@ function setupUpload(userId) {
                     const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
                     progressFill.style.width = progress + '%';
                 }, 
-                (error) => { console.error(error); alert("Upload failed."); }, 
+                (error) => { 
+                    console.error(error); 
+                    showAlert("Upload Failed", "There was an error uploading your file."); // Replacement
+                }, 
                 async () => {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
@@ -117,7 +118,7 @@ function setupUpload(userId) {
                         ownerId: userId,
                         fileName: file.name,
                         fileUrl: downloadURL,
-                        storagePath: storagePath, // Storing path for easier future deletions
+                        storagePath: storagePath,
                         version: nextVersion,
                         category: categoryValue,
                         priority: priorityLevel,
@@ -135,7 +136,7 @@ function setupUpload(userId) {
                         if (categoryValue === 'title-page') {
                             openTemplateMapper(downloadURL, docRef.id);
                         } else {
-                            alert(`${categoryLabel} successfully updated.`);
+                            showAlert("Success", `${categoryLabel} successfully updated.`); // Replacement
                         }
                     }, 1000);
                 }
@@ -216,18 +217,20 @@ function attachDeleteListeners() {
             const id = e.currentTarget.getAttribute('data-id');
             const fileUrl = e.currentTarget.getAttribute('data-url');
             
-            if (confirm("Permanently delete this document and its file?")) {
+            // 2. Updated: Replaced confirm() with showConfirm()
+            const confirmed = await showConfirm(
+                "Delete Document?", 
+                "Are you sure you want to permanently delete this document and its file? This action cannot be undone."
+            );
+
+            if (confirmed) {
                 try {
-                    // 1. Delete from Firebase Storage
                     await deleteFileFromStorage(fileUrl);
-                    
-                    // 2. Delete from Firestore
                     await deleteDoc(doc(db, "knowledge", id));
-                    
                     console.log("Sync delete successful.");
                 } catch (err) { 
                     console.error("Delete sequence failed:", err); 
-                    alert("Error deleting document. Check console.");
+                    showAlert("Delete Error", "Error deleting document. Check console for details."); // Replacement
                 }
             }
         };
@@ -271,7 +274,7 @@ async function openTemplateMapper(url, docId) {
         });
 
         canvas.onclick = (e) => {
-            if (!activeField) return alert("Please select a field button on the right first!");
+            if (!activeField) return showAlert("Field Required", "Please select a field button on the right first!"); // Replacement
             const rect = canvas.getBoundingClientRect();
             const xPercent = (e.clientX - rect.left) / canvas.width;
             const yPercent = (e.clientY - rect.top) / canvas.height;
@@ -285,12 +288,14 @@ async function openTemplateMapper(url, docId) {
         };
     } catch (err) {
         console.error("PDF Mapping Error:", err);
-        alert("Failed to load PDF preview.");
+        showAlert("Error", "Failed to load PDF preview."); // Replacement
     }
 }
 
 document.getElementById('save-mapping-btn').onclick = async () => {
-    if (Object.keys(currentMappings).length < 3) return alert("Please set positions for all 3 fields.");
+    if (Object.keys(currentMappings).length < 3) {
+        return showAlert("Incomplete Mapping", "Please set positions for all 3 fields before saving."); // Replacement
+    }
     
     const fontSettings = {
         family: document.getElementById('map-font-family').value,
@@ -302,10 +307,10 @@ document.getElementById('save-mapping-btn').onclick = async () => {
             mapping: currentMappings,
             fontStyle: fontSettings
         });
-        alert("Template Mapping & Styles Saved!");
+        showAlert("Mapping Saved", "Template Mapping & Styles have been successfully saved!"); // Replacement
         document.getElementById('mapper-modal').style.display = 'none';
     } catch (e) {
-        alert("Error saving: " + e.message);
+        showAlert("Save Error", "Error saving mapping: " + e.message); // Replacement
     }
 };
 
