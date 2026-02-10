@@ -107,6 +107,11 @@ async function generateBrandedPDF() {
         compress: true
     });
 
+    const pageHeight = 297; 
+    const pageWidth = 210;
+    const pageMargin = 25; 
+    const contentWidth = pageWidth - (pageMargin * 2);
+
     const downloadBtn = document.getElementById('download-pdf-btn');
     if (downloadBtn) {
         downloadBtn.disabled = true;
@@ -125,7 +130,6 @@ async function generateBrandedPDF() {
                 document.head.appendChild(script);
             });
         }
-
         try {
             if (url.toLowerCase().includes('.pdf')) {
                 pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
@@ -176,64 +180,105 @@ async function generateBrandedPDF() {
         const titlePageAsset = assets.find(a => a.category === 'title-page');
         const contactPageAsset = assets.find(a => a.category === 'contact-page');
 
+        // 1. RENDER TITLE PAGE
         if (titlePageAsset?.fileUrl) {
             try {
                 const imgData = await loadAssetAsImage(titlePageAsset.fileUrl);
-                doc.addImage(imgData, 'PNG', 0, 0, 210, 297, undefined, 'NONE');
-                
+                doc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'NONE');
                 if (titlePageAsset.mapping) {
                     const map = titlePageAsset.mapping;
                     const style = titlePageAsset.fontStyle || { family: 'helvetica', size: 24 };
                     doc.setTextColor(40, 40, 40);
-                    
                     if (map.tenderName) {
                         doc.setFont(style.family, "bold");
                         doc.setFontSize(style.size);
-                        doc.text(currentBidData.bidName || "Project Proposal", map.tenderName.x * 210, map.tenderName.y * 297);
+                        doc.text(currentBidData.bidName || "Project Proposal", map.tenderName.x * pageWidth, map.tenderName.y * pageHeight);
                     }
                     if (map.clientName) {
                         doc.setFont(style.family, "normal");
                         doc.setFontSize(Math.max(12, Math.round(style.size * 0.6)));
-                        doc.text(currentBidData.client || "Valued Client", map.clientName.x * 210, map.clientName.y * 297);
+                        doc.text(currentBidData.client || "Valued Client", map.clientName.x * pageWidth, map.clientName.y * pageHeight);
                     }
                     if (map.userName) {
                         doc.setFont(style.family, "normal");
                         doc.setFontSize(Math.max(12, Math.round(style.size * 0.5)));
-                        doc.text(actualName, map.userName.x * 210, map.userName.y * 297);
+                        doc.text(actualName, map.userName.x * pageWidth, map.userName.y * pageHeight);
                     }
                     if (map.date) {
                         doc.setFont(style.family, "normal");
                         doc.setFontSize(Math.max(10, Math.round(style.size * 0.4)));
                         const dateStr = new Date().toLocaleDateString('en-GB');
-                        doc.text(dateStr, map.date.x * 210, map.date.y * 297);
+                        doc.text(dateStr, map.date.x * pageWidth, map.date.y * pageHeight);
                     }
                 }
-                doc.addPage();
             } catch (e) { console.warn("Title page skip", e); }
         }
 
+        // 2. RENDER CONTENT SECTIONS
         doc.setTextColor(0, 0, 0);
-        let y = 30;
+        let y = pageMargin;
+
         currentBidData.sections.forEach((section, i) => {
-            if (y > 260) { doc.addPage(); y = 30; }
-            doc.setFont("helvetica", "bold"); doc.setFontSize(16);
-            const titleLines = doc.splitTextToSize(`${i + 1}. ${section.sectionTitle || 'Section'}`, 170);
-            doc.text(titleLines, 20, y);
-            y += (titleLines.length * 8);
-            
-            doc.setFont("helvetica", "normal"); doc.setFontSize(11);
+            // New page before every section except if we are at the very start of page 1
+            // (Actually usually better to just keep flow unless title page exists)
+            if (i === 0 && titlePageAsset) {
+                doc.addPage();
+                y = pageMargin;
+            }
+
+            const title = `${i + 1}. ${section.sectionTitle || 'Section'}`;
             const content = section.draftAnswer || section.aiResponse || "No content provided.";
-            const bodyLines = doc.splitTextToSize(content, 170);
-            doc.text(bodyLines, 20, y);
-            y += (bodyLines.length * 7) + 15;
+            
+            doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+            const titleLines = doc.splitTextToSize(title, contentWidth);
+            const titleHeight = titleLines.length * 8;
+
+            if (y + titleHeight > (pageHeight - pageMargin)) {
+                doc.addPage();
+                y = pageMargin;
+            }
+            doc.text(titleLines, pageMargin, y);
+            y += titleHeight + 4;
+
+            doc.setFont("helvetica", "normal"); doc.setFontSize(11);
+            const bodyLines = doc.splitTextToSize(content, contentWidth);
+            const lineHeight = 7;
+
+            bodyLines.forEach((line) => {
+                if (y + lineHeight > (pageHeight - pageMargin)) {
+                    doc.addPage();
+                    y = pageMargin;
+                }
+                doc.text(line, pageMargin, y);
+                y += lineHeight;
+            });
+
+            y += 10; 
         });
 
+        // 3. RENDER CONTACT PAGE
         if (contactPageAsset?.fileUrl) {
             try {
                 doc.addPage();
                 const contactImgData = await loadAssetAsImage(contactPageAsset.fileUrl);
-                doc.addImage(contactImgData, 'PNG', 0, 0, 210, 297, undefined, 'NONE');
+                doc.addImage(contactImgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'NONE');
             } catch (e) { console.warn("Contact page skip", e); }
+        }
+
+        // --- ADD PAGE NUMBERS ---
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(9);
+            doc.setTextColor(150, 150, 150);
+            // Centered at bottom: (PageWidth / 2, PageHeight - 10mm)
+            doc.text(
+                `Page ${i} of ${totalPages}`, 
+                pageWidth / 2, 
+                pageHeight - 10, 
+                { align: "center" }
+            );
         }
 
         doc.save(`${currentBidData.bidName || 'Bid'}_Final.pdf`);
