@@ -10,21 +10,26 @@ const { onObjectFinalized } = require("firebase-functions/v2/storage");
 const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const path = require("path");
 const fs = require("fs");
+const PDFParser = require("pdf2json");
 
 admin.initializeApp();
 
-// Ensure the region matches your Firestore/Storage setup
-setGlobalOptions({ 
-    region: "us-east1",
-    maxInstances: 10 
+setGlobalOptions({
+  region: "us-east1",
+  maxInstances: 10
 });
 
 const getDb = () => getFirestore("default");
-
 const pineconeApiKey = defineSecret("PINECONE_API_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// --- PINECONE CONNECTION TEST ---
+const PINECONE_INDEX = "mergepoint-index";
+
+/* ------------------ UTIL ------------------ */
+const getNamespaceForDoc = (ownerId, docId) =>
+  `kb_${ownerId}_${docId}`;
+
+/* ------------------ PINECONE TEST ------------------ */
 exports.checkPineconeConnection = onRequest(
   { secrets: [pineconeApiKey] },
   async (req, res) => {
@@ -38,226 +43,223 @@ exports.checkPineconeConnection = onRequest(
   }
 );
 
-// --- GEMINI TENDER ANALYSIS ---
-exports.analyzeTenderDocument = onCall(
-  { secrets: [geminiApiKey], timeoutSeconds: 540, memory: "2GiB" },
-  async (request) => {
-    if (!request.auth) throw new Error("Unauthorized: You must be logged in.");
-
-    const { bidId, fileName } = request.data;
-    const tempFilePath = path.join("/tmp", `tender_${Date.now()}.pdf`);
-
-    try {
-      const bucket = admin.storage().bucket();
-      const storagePath = `tenders/${request.auth.uid}/${fileName}`;
-      await bucket.file(storagePath).download({ destination: tempFilePath });
-
-      const PDFParser = require("pdf2json");
-      const pdfParser = new PDFParser(null, 1);
-
-      const tenderText = await new Promise((resolve, reject) => {
-        pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
-        pdfParser.on("pdfParser_dataError", err => reject(err));
-        pdfParser.parseBuffer(fs.readFileSync(tempFilePath));
-      });
-
-      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-      const prompt = `
-        You are a professional Bid Manager.
-        Extract every question or section that requires a written response.
-        Return ONLY valid JSON in this format:
-        [{"sectionTitle": "Heading", "question": "Requirement text", "status": "ready", "aiResponse": "", "confidence": 100}]
-        TEXT: ${tenderText.substring(0, 35000)}
-      `;
-
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
-      const sections = JSON.parse(jsonMatch[0]);
-
-      await getDb().collection("bids").doc(bidId).update({
-        sections,
-        status: "scoping",
-        extractedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      return { success: true, count: sections.length };
-    } catch (error) {
-      return { success: false, error: error.message };
-    } finally {
-      if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-    }
-  }
-);
-
-// --- RAG SECTION DRAFTER ---
+/* ------------------ RAG SECTION DRAFTER ------------------ */
 exports.generateSectionDraft = onCall(
   { secrets: [geminiApiKey, pineconeApiKey] },
   async (request) => {
     if (!request.auth) throw new Error("Unauthorized");
 
-    const { question, bidId, sectionIndex } = request.data;
+    const { question } = request.data;
     const userId = request.auth.uid;
 
     try {
-      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+      const db = getDb();
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value().trim());
       const embedModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-      const embedding = await embedModel.embedContent({
+      const embedResult = await embedModel.embedContent({
         content: { parts: [{ text: question }] },
-        taskType: "RETRIEVAL_QUERY",
         outputDimensionality: 768
       });
 
-      const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
-      const index = pc.index("mergepoint-index");
+      const embedding = embedResult.embedding.values;
 
-      const queryResponse = await index.query({
-        vector: embedding.embedding.values,
-        topK: 8,
-        // UPDATED: Filter out branding categories to be safe
-        filter: { 
-            ownerId: userId,
-            category: { "$nin": ["title-page", "contact-page"] } 
-        },
-        includeMetadata: true
+      const pc = new Pinecone({ apiKey: pineconeApiKey.value().trim() });
+      const index = pc.index(PINECONE_INDEX);
+
+      // Fetch all active knowledge docs
+      const snap = await db
+        .collection("knowledge")
+        .where("ownerId", "==", userId)
+        .where("excludeFromAI", "==", false)
+        .get();
+
+      const queries = snap.docs.map(doc => {
+        const ns = getNamespaceForDoc(userId, doc.id);
+        return index.namespace(ns).query({
+          vector: embedding,
+          topK: 5,
+          includeMetadata: true
+        });
       });
 
-      const contextText = queryResponse.matches.map(m => {
+      const results = (await Promise.all(queries))
+        .flatMap(r => r.matches || [])
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8);
+
+      const contextText = results.map(m => {
         const cat = (m.metadata.category || "master").toUpperCase();
-        const prio = m.metadata.priority || 1;
-        return `[Source: ${cat} | Priority: ${prio}]\n${m.metadata.text}`;
+        return `[Source: ${cat}]\n${m.metadata.text}`;
       }).join("\n\n---\n\n");
 
       const prompt = `
-        You are an expert Bid Writer.
-        QUESTION: "${question}"
-        COMPANY CONTEXT: ${contextText || "No relevant company information found."}
-        Write a clear, compliant draft response. Return ONLY the response text.
-      `;
+You are an expert bid writer.
 
-      const result = await model.generateContent(prompt);
-      const answerText = result.response.text();
+QUESTION:
+"${question}"
 
-      if (bidId && sectionIndex !== undefined) {
-        const bidRef = getDb().collection("bids").doc(bidId);
-        const sections = (await bidRef.get()).data()?.sections || [];
-        if (sections[sectionIndex]) {
-          sections[sectionIndex].draftAnswer = answerText;
-          await bidRef.update({ sections });
-        }
-      }
+CONTEXT:
+${contextText || "No relevant context."}
 
-      return { success: true, answer: answerText, contextFound: queryResponse.matches.length > 0 };
+Write a professional, compliant response.
+`;
+
+      const resultGen = await model.generateContent(prompt);
+      return { success: true, answer: resultGen.response.text() };
+
     } catch (error) {
+      console.error("DRAFT ERROR:", error.stack);
       return { success: false, error: error.message };
     }
   }
 );
 
-// --- KNOWLEDGE BASE SYNC (UPLOAD) ---
+/* ------------------ KNOWLEDGE BASE INGEST ------------------ */
 exports.processMasterDocument = onObjectFinalized(
-  { region: "us-east1", secrets: [geminiApiKey, pineconeApiKey], timeoutSeconds: 300, memory: "1GiB" },
+  {
+    region: "us-east1",
+    secrets: [geminiApiKey, pineconeApiKey],
+    timeoutSeconds: 300,
+    memory: "1GiB"
+  },
   async (event) => {
     const filePath = event.data.name;
-    // Branding might be images, while knowledge is PDF. We check path first.
     if (!filePath?.toLowerCase().includes("knowledge/")) return;
 
     const bucket = admin.storage().bucket(event.data.bucket);
     const pathParts = filePath.split("/");
-    const fileName = pathParts.at(-1);
     const userId = pathParts.at(-2);
+    const fileName = pathParts.at(-1);
 
     try {
       const db = getDb();
-      const snap = await db.collection("knowledge").where("ownerId", "==", userId).get();
-      const metaDoc = snap.docs.find(d => fileName.includes(d.data().fileName));
-      const metaData = metaDoc?.data();
-      
-      const category = metaData?.category || "master";
-      const priority = metaData?.priority || 1;
+      await new Promise(r => setTimeout(r, 3000));
 
-      // NEW LOGIC: Skip Pinecone if it's a branding asset
-      if (metaData?.excludeFromAI === true || ["title-page", "contact-page"].includes(category)) {
-        console.log("Branding asset detected. Skipping vectorization.");
-        if (metaDoc) await metaDoc.ref.update({ status: "ready" });
+      const snap = await db
+        .collection("knowledge")
+        .where("ownerId", "==", userId)
+        .get();
+
+      const metaDoc = snap.docs.find(d =>
+        d.data().storagePath === filePath || d.data().fileName === fileName
+      );
+
+      if (!metaDoc) return;
+
+      const metaData = metaDoc.data();
+      if (metaData.excludeFromAI === true) {
+        await metaDoc.ref.update({ status: "ready" });
         return;
       }
 
-      // Only process PDFs for Pinecone
-      if (!filePath.toLowerCase().endsWith(".pdf")) return;
+      const namespace = getNamespaceForDoc(userId, metaDoc.id);
 
-      const tempFilePath = path.join("/tmp", fileName);
+      const tempFilePath = path.join("/tmp", `ingest_${Date.now()}.pdf`);
       await bucket.file(filePath).download({ destination: tempFilePath });
 
-      const PDFParser = require("pdf2json");
       const pdfParser = new PDFParser(null, 1);
-      const fullText = await new Promise(resolve => {
-        pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
+      const fullText = await new Promise((resolve, reject) => {
+        pdfParser.on("pdfParser_dataReady", () =>
+          resolve(pdfParser.getRawTextContent())
+        );
+        pdfParser.on("pdfParser_dataError", reject);
         pdfParser.parseBuffer(fs.readFileSync(tempFilePath));
       });
 
       const chunks = fullText.match(/[\s\S]{1,1000}/g) || [];
-      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value().trim());
       const embedModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
-      const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
-      const index = pc.index("mergepoint-index");
+      const pc = new Pinecone({ apiKey: pineconeApiKey.value().trim() });
+      const index = pc.index(PINECONE_INDEX).namespace(namespace);
 
-      const vectors = await Promise.all(chunks.map(async (chunk, i) => {
-        const result = await embedModel.embedContent({
-          content: { parts: [{ text: chunk }] },
-          taskType: "RETRIEVAL_DOCUMENT",
-          outputDimensionality: 768
-        });
-        return {
-          id: `${userId}_${Date.now()}_${i}`,
-          values: result.embedding.values,
-          metadata: { text: chunk, ownerId: userId, source: fileName, category, priority }
-        };
-      }));
+      const vectors = await Promise.all(
+        chunks.map(async (chunk, i) => {
+          const result = await embedModel.embedContent({
+            content: { parts: [{ text: chunk }] },
+            outputDimensionality: 768
+          });
+
+          return {
+            id: `${metaDoc.id}_${i}`,
+            values: result.embedding.values,
+            metadata: {
+              text: chunk,
+              category: metaData.category || "master"
+            }
+          };
+        })
+      );
 
       await index.upsert(vectors);
-      if (metaDoc) await metaDoc.ref.update({ status: "ready" });
+      await metaDoc.ref.update({
+        status: "ready",
+        vectorizedAt: admin.firestore.FieldValue.serverTimestamp(),
+        pineconeNamespace: namespace
+      });
+
       if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+      console.log(`Ingested ${vectors.length} vectors into ${namespace}`);
+
     } catch (error) {
-      console.error("INGESTION ERROR:", error.message);
+      console.error("INGEST ERROR:", error.stack);
     }
   }
 );
 
-// --- KNOWLEDGE BASE DELETE SYNC ---
+/* ------------------ KNOWLEDGE BASE DELETE ------------------ */
 exports.cleanupKnowledgeBase = onDocumentDeleted(
-  { document: "knowledge/{docId}", database: "default", region: "europe-west2", secrets: [pineconeApiKey] },
+  {
+    document: "knowledge/{docId}",
+    database: "default",
+    region: "europe-west2",
+    secrets: [pineconeApiKey]
+  },
   async (event) => {
-    const data = event.data?.data();
-    if (!data?.fileName || !data?.ownerId) return;
+    const data = event.data?.data();   // ✅ FIX
+    const docId = event.params.docId;
 
+    if (!data) {
+      console.error("Cleanup aborted: no document data");
+      return;
+    }
+
+    const { ownerId, storagePath, fileName, excludeFromAI } = data;
+
+    console.log(`KB delete triggered for doc ${docId}, user ${ownerId}`);
+
+    /* -------- Storage cleanup -------- */
     try {
       const bucket = admin.storage().bucket();
-      // Storage Cleanup
-      const storagePath = `knowledge/${data.ownerId}/${data.fileName}`;
-      const file = bucket.file(storagePath);
-      if ((await file.exists())[0]) await file.delete();
+      const pathToDelete = storagePath || `knowledge/${ownerId}/${fileName}`;
+      const file = bucket.file(pathToDelete);
+      const [exists] = await file.exists();
 
-      // Pinecone Cleanup (Only if it was an AI-indexed document)
-      if (data.excludeFromAI !== true) {
-        const pc = new Pinecone({ apiKey: pineconeApiKey.value() });
-        const index = pc.index("mergepoint-index");
-        const query = await index.query({ 
-          vector: Array(768).fill(0), 
-          filter: { ownerId: data.ownerId, source: data.fileName }, 
-          topK: 1000 
-        });
-
-        const ids = query.matches.map(m => m.id);
-        if (ids.length) await index.deleteMany(ids);
+      if (exists) {
+        await file.delete();
+        console.log(`Storage file deleted: ${pathToDelete}`);
       }
-    } catch (error) {
-      console.error("CLEANUP ERROR:", error.message);
+    } catch (err) {
+      console.error("Storage cleanup error:", err.message);
+    }
+
+    /* -------- Pinecone cleanup -------- */
+    if (excludeFromAI !== true && ownerId) {
+      try {
+        const pc = new Pinecone({ apiKey: pineconeApiKey.value().trim() });
+        const namespace = getNamespaceForDoc(ownerId, docId);
+
+        await pc
+          .index(PINECONE_INDEX)
+          .namespace(namespace)
+          .deleteAll();
+
+        console.log(`Pinecone namespace deleted: ${namespace}`);
+      } catch (err) {
+        console.error("Pinecone cleanup error:", err.stack);
+      }
     }
   }
 );
