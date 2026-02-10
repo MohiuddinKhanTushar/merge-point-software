@@ -54,9 +54,45 @@ checkAuthState((user) => {
                 }
             }
         });
+
         loadReviewerDropdown();
+
+        // Save Button logic
         const saveBtn = document.getElementById('save-bid-btn');
         if (saveBtn) saveBtn.onclick = saveActiveSection;
+
+        // --- RE-ANALYZE DOC LOGIC ---
+        const reAnalyzeBtn = document.getElementById('generate-response-btn');
+        if (reAnalyzeBtn) {
+            reAnalyzeBtn.onclick = async () => {
+                if (!currentBidData?.fileName) return showToast("No file found to analyze", "error");
+                
+                reAnalyzeBtn.disabled = true;
+                reAnalyzeBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Analyzing...`;
+                if (window.lucide) lucide.createIcons();
+
+                try {
+                    const analyzeDoc = httpsCallable(functions, 'analyzeTenderDocument');
+                    const result = await analyzeDoc({ 
+                        bidId: bidId, 
+                        fileName: currentBidData.fileName 
+                    });
+
+                    if (result.data.success) {
+                        showToast("Tender re-analyzed successfully!");
+                    } else {
+                        throw new Error(result.data.error || "Analysis failed");
+                    }
+                } catch (e) {
+                    console.error("Analysis Error:", e);
+                    showToast("Analysis failed: " + e.message, "error");
+                } finally {
+                    reAnalyzeBtn.disabled = false;
+                    reAnalyzeBtn.innerHTML = `<i data-lucide="sparkles"></i> Re-Analyze Doc`;
+                    if (window.lucide) lucide.createIcons();
+                }
+            };
+        }
     }
 });
 
@@ -64,7 +100,6 @@ async function generateBrandedPDF() {
     const { jsPDF } = window.jspdf || {};
     if (!jsPDF) return showToast("jsPDF library not initialized. Please refresh.", "error");
 
-    // Initialize with compress: true to keep file size optimized despite high-res assets
     const doc = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -97,20 +132,14 @@ async function generateBrandedPDF() {
                 const loadingTask = pdfLib.getDocument({ url: url, cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/cmaps/', cMapPacked: true });
                 const pdf = await loadingTask.promise;
                 const page = await pdf.getPage(1);
-                
-                // --- ULTRA-HIGH RESOLUTION (300+ DPI) ---
                 const viewport = page.getViewport({ scale: 5.0 }); 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
-                
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
-                
                 context.imageSmoothingEnabled = true;
                 context.imageSmoothingQuality = 'high';
-
                 await page.render({ canvasContext: context, viewport: viewport }).promise;
-                // Using PNG to maintain absolute sharpness for logos
                 return canvas.toDataURL('image/png'); 
             } else {
                 return new Promise((res, rej) => {
@@ -133,12 +162,10 @@ async function generateBrandedPDF() {
     };
 
     try {
-        // 1. Fetch Branding Assets
         const qAssets = query(collection(db, "knowledge"), where("ownerId", "==", auth.currentUser.uid));
         const snapAssets = await getDocs(qAssets);
         const assets = snapAssets.docs.map(d => d.data());
         
-        // 2. Fetch Actual User Name from Firestore (Fix for "Proposal Lead" issue)
         const qUser = query(collection(db, "users"), where("uid", "==", auth.currentUser.uid));
         const snapUser = await getDocs(qUser);
         let actualName = "Proposal Lead";
@@ -149,11 +176,9 @@ async function generateBrandedPDF() {
         const titlePageAsset = assets.find(a => a.category === 'title-page');
         const contactPageAsset = assets.find(a => a.category === 'contact-page');
 
-        // --- RENDER TITLE PAGE ---
         if (titlePageAsset?.fileUrl) {
             try {
                 const imgData = await loadAssetAsImage(titlePageAsset.fileUrl);
-                // Use 'NONE' alias to prevent jsPDF from downscaling our high-res assets
                 doc.addImage(imgData, 'PNG', 0, 0, 210, 297, undefined, 'NONE');
                 
                 if (titlePageAsset.mapping) {
@@ -174,7 +199,6 @@ async function generateBrandedPDF() {
                     if (map.userName) {
                         doc.setFont(style.family, "normal");
                         doc.setFontSize(Math.max(12, Math.round(style.size * 0.5)));
-                        // Correctly inserting only the Name
                         doc.text(actualName, map.userName.x * 210, map.userName.y * 297);
                     }
                     if (map.date) {
@@ -188,7 +212,6 @@ async function generateBrandedPDF() {
             } catch (e) { console.warn("Title page skip", e); }
         }
 
-        // --- RENDER CONTENT SECTIONS ---
         doc.setTextColor(0, 0, 0);
         let y = 30;
         currentBidData.sections.forEach((section, i) => {
@@ -205,7 +228,6 @@ async function generateBrandedPDF() {
             y += (bodyLines.length * 7) + 15;
         });
 
-        // --- RENDER CONTACT PAGE ---
         if (contactPageAsset?.fileUrl) {
             try {
                 doc.addPage();
