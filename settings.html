@@ -9,13 +9,11 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <script>
-    // This runs INSTANTLY before the rest of the page loads
     (function() {
         const savedName = localStorage.getItem('userDisplayName');
         const savedInitial = localStorage.getItem('userInitial');
         
         if (savedName && savedInitial) {
-            // We use a small interval just to ensure the DOM elements exist
             const checkExist = setInterval(function() {
                 const nameEl = document.getElementById('display-name');
                 const avatarEl = document.getElementById('avatar-circle');
@@ -25,7 +23,7 @@
                     avatarEl.textContent = savedInitial;
                     clearInterval(checkExist);
                 }
-            }, 5); // Checks every 5ms
+            }, 5);
         }
     })();
 </script>
@@ -40,14 +38,13 @@
     </script>
 </head>
 <body>
-    
-    <div class="dashboard-container">
+    <div class="dashboard-container" id="settings-page-content" style="display: none;">
         <nav class="sidebar" id="sidebar">
             <div class="logo">
-    <a href="dashboard.html">
-        <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
-    </a>
-</div>
+                <a href="dashboard.html">
+                    <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+                </a>
+            </div>
             <button id="sidebar-toggle" class="toggle-btn">
                 <i data-lucide="chevron-left"></i>
             </button>
@@ -159,7 +156,6 @@
 
         // 2. Protect page and update User UI
         checkAuthState((user) => {
-            // Only load settings logic if we have a valid user
             initSettings();
         });
     </script>

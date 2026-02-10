@@ -19,32 +19,44 @@ export function initSettings() {
 
     checkAuthState(async (user) => {
         if (!user) {
-            console.error("Auth: No user detected.");
+            window.location.href = 'login.html';
             return;
         }
 
         try {
-            // 1. Fetch User Data from Firestore
             const userRef = doc(db, "users", user.uid);
             const userSnap = await getDoc(userRef);
             
             if (!userSnap.exists()) {
-                alert("User profile not found in database.");
+                alert("User profile not found.");
                 return;
             }
 
             const userData = userSnap.data();
 
-            // 2. Security Gate: Ensure only admins access this page
+            // --- SECURITY GATE ---
             if (userData.role !== 'admin') {
+                // Hide cancel button for this specific "Access Denied" alert
+                const cancelBtn = document.getElementById('modal-cancel');
+                if (cancelBtn) cancelBtn.style.display = 'none';
+
+                await showConfirmModal(
+                    "Access Denied", 
+                    "You do not have administrative permissions to view this page. Click OK to return to the dashboard.",
+                    "OK"
+                );
+
+                // Re-enable cancel button for future modals before redirecting
+                if (cancelBtn) cancelBtn.style.display = 'block';
+                
                 window.location.href = 'index.html';
                 return;
             }
 
-            // NOTE: Sidebar Profile (Name/Avatar) is now handled globally by auth.js
-            // to prevent the "flicker" or email-prefix overwrite.
+            // --- AUTHORIZED: SHOW THE PAGE ---
+            const pageContent = document.getElementById('settings-page-content');
+            if (pageContent) pageContent.style.display = 'flex';
 
-            // 3. Initialize Settings Features
             const orgId = userData.orgId || 'default-org';
             setupReviewToggle(orgId);
             loadUsers(orgId, user.uid); 
@@ -118,8 +130,6 @@ async function removeUser(uid) {
     }
 }
 
-// --- INVITATION LOGIC ---
-
 function loadPendingInvites(orgId) {
     const inviteList = document.getElementById('pending-invite-list');
     if (!inviteList) return;
@@ -166,8 +176,6 @@ function loadPendingInvites(orgId) {
         });
     });
 }
-
-// --- HELPERS & MODALS ---
 
 function showConfirmModal(title, message, confirmText = "Confirm") {
     return new Promise((resolve) => {
