@@ -23,21 +23,33 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 initSidebar();
 const firestore = db;
 const storage = getStorage(app);
-
-// CRITICAL: Set region to us-east1 to match backend deployment
 const functions = getFunctions(app, "us-east1"); 
 
 let selectedFile = null; 
 
-// Protect the page
-checkAuthState((user) => {
-    console.log("Welcome, user:", user.uid);
+// Protect the page and load data based on Role
+checkAuthState(async (user) => {
     if (document.querySelector('.bids-grid')) {
-        loadActiveBids(user.uid);
+        try {
+            // Fetch the user's full profile to determine Role and Org
+            const userSnap = await getDoc(doc(firestore, "users", user.uid));
+            if (userSnap.exists()) {
+                const userData = userSnap.data();
+                const orgId = userData.orgId || "default-org";
+                const userRole = userData.role || "standard";
+
+                // Load bids with specific permission context
+                loadActiveBids(orgId, user.uid, userRole);
+            } else {
+                console.error("User profile not found.");
+                showAlert("Profile Error", "Could not load user permissions.");
+            }
+        } catch (err) {
+            console.error("Auth state logic error:", err);
+        }
     }
 });
 
-// Hook up Logout
 const logoutBtn = document.getElementById('logout-btn');
 if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
 
@@ -70,7 +82,11 @@ async function handleCreateBid() {
     if (progressContainer) progressContainer.style.display = 'block';
 
     try {
-        // STEP A: Verify Knowledge Base
+        // Get OrgID from user profile
+        const userSnap = await getDoc(doc(firestore, "users", user.uid));
+        const orgId = userSnap.exists() ? userSnap.data().orgId : "default-org";
+
+        // Verify Knowledge Base
         if (statusText) statusText.innerText = "Verifying Knowledge Base...";
         const hasMasterDoc = await checkMasterDocument(user.uid);
         if (!hasMasterDoc) {
@@ -79,20 +95,18 @@ async function handleCreateBid() {
             return;
         }
 
-        // STEP B: Generate unique filename and upload
+        // Upload file
         if (statusText) statusText.innerText = "Uploading tender document...";
-        
         const timestamp = Date.now();
         const cleanName = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_'); 
         const uniqueFileName = `${timestamp}_${cleanName}`;
-        
         const storagePath = `tenders/${user.uid}/${uniqueFileName}`;
         const fileRef = ref(storage, storagePath);
         
         const uploadResult = await uploadBytes(fileRef, selectedFile);
         const downloadUrl = await getDownloadURL(uploadResult.ref);
 
-        // STEP C: Create Firestore Record
+        // Create Firestore Record
         if (statusText) statusText.innerText = "Initializing project...";
         const deadlineDate = deadlineValue ? Timestamp.fromDate(new Date(deadlineValue)) : serverTimestamp();
 
@@ -103,12 +117,13 @@ async function handleCreateBid() {
             status: "scoping",
             progress: 10, 
             ownerId: user.uid,
+            orgId: orgId, 
             createdAt: serverTimestamp(),
             fileName: uniqueFileName, 
             pdfUrl: downloadUrl 
         });
 
-        // STEP D: Trigger AI Analysis
+        // Trigger AI Analysis
         if (statusText) statusText.innerText = "AI is extracting mandatory questions...";
         const analyzeTender = httpsCallable(functions, 'analyzeTenderDocument');
         
@@ -124,8 +139,7 @@ async function handleCreateBid() {
                 window.location.href = `workspace.html?id=${bidDoc.id}`;
             }, 1000);
         } else {
-            const errorMsg = result.data?.error || "AI Analysis failed.";
-            throw new Error(errorMsg);
+            throw new Error(result.data?.error || "AI Analysis failed.");
         }
 
     } catch (e) { 
@@ -164,20 +178,34 @@ function toggleUpload() {
 }
 window.toggleUpload = toggleUpload;
 
-// 4. Load Active Bids
-function loadActiveBids(userId) {
+// 4. Load Active Bids (Role-Based Logic)
+function loadActiveBids(orgId, userId, userRole) {
     const bidsGrid = document.querySelector('.bids-grid');
     if (!bidsGrid) return;
 
-    const bidsQuery = query(
-        collection(firestore, "bids"), 
-        where("ownerId", "==", userId),
-        where("status", "in", ["drafting", "review", "scoping", "approved"])
-    );
+    let bidsQuery;
+    
+    // Check if user is Admin/Manager or Standard
+    if (userRole === 'admin' || userRole === 'manager') {
+        // Organizations view: See all bids in the company
+        bidsQuery = query(
+            collection(firestore, "bids"), 
+            where("orgId", "==", orgId),
+            where("status", "in", ["drafting", "review", "scoping", "approved"])
+        );
+    } else {
+        // Individual view: Only see bids where current user is the owner
+        bidsQuery = query(
+            collection(firestore, "bids"), 
+            where("orgId", "==", orgId),
+            where("ownerId", "==", userId),
+            where("status", "in", ["drafting", "review", "scoping", "approved"])
+        );
+    }
 
     onSnapshot(bidsQuery, (snapshot) => {
         if (snapshot.empty) {
-            bidsGrid.innerHTML = "<p>No active bids found. Try creating one!</p>";
+            bidsGrid.innerHTML = `<p>No active bids found for ${userRole === 'standard' ? 'you' : 'your organization'}.</p>`;
             return;
         }
 
@@ -256,11 +284,14 @@ async function archiveBid(bidId) {
             const bidSnap = await getDoc(bidRef);
 
             if (bidSnap.exists()) {
+                const data = bidSnap.data();
                 await addDoc(collection(firestore, "archived_rfps"), {
-                    ...bidSnap.data(),
-                    dateArchived: serverTimestamp()
+                    ...data,
+                    dateArchived: serverTimestamp(),
+                    orgId: data.orgId || "default-org" 
                 });
                 await deleteDoc(bidRef);
+                showAlert("Success", "Project moved to library.");
             }
         } catch (error) { 
             console.error("Archive error:", error); 
@@ -290,7 +321,6 @@ async function deleteBid(bidId) {
                 const data = bidSnap.data();
                 const fileName = data.fileName;
 
-                // 1. Delete from Firebase Storage
                 if (fileName) {
                     try {
                         const storagePath = `tenders/${user.uid}/${fileName}`;
@@ -301,13 +331,12 @@ async function deleteBid(bidId) {
                     }
                 }
 
-                // 2. Delete from Firestore
                 await deleteDoc(bidRef);
                 console.log("Firestore document deleted");
             }
         } catch (error) { 
             console.error("Delete error:", error); 
-            showAlert("Error", "Failed to delete project: " + error.message);
+            showAlert("Error", "Failed to delete project.");
         }
     }
 }

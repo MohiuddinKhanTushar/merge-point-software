@@ -36,7 +36,6 @@ export function initSettings() {
 
             // --- SECURITY GATE ---
             if (userData.role !== 'admin') {
-                // Hide cancel button for this specific "Access Denied" alert
                 const cancelBtn = document.getElementById('modal-cancel');
                 if (cancelBtn) cancelBtn.style.display = 'none';
 
@@ -46,9 +45,7 @@ export function initSettings() {
                     "OK"
                 );
 
-                // Re-enable cancel button for future modals before redirecting
                 if (cancelBtn) cancelBtn.style.display = 'block';
-                
                 window.location.href = 'index.html';
                 return;
             }
@@ -205,6 +202,9 @@ function showConfirmModal(title, message, confirmText = "Confirm") {
     });
 }
 
+/**
+ * UPDATED: Creates an invite record AND triggers the Firebase Email Extension
+ */
 function setupInviteForm(orgId, adminEmail) {
     const inviteForm = document.getElementById('invite-form');
     if (!inviteForm) return;
@@ -215,20 +215,55 @@ function setupInviteForm(orgId, adminEmail) {
         const emailInput = document.getElementById('invite-email');
         const roleInput = document.getElementById('invite-role');
 
+        const guestName = nameInput.value.trim();
+        const guestEmail = emailInput.value.toLowerCase().trim();
+        const guestRole = roleInput.value;
+
         try {
-            await addDoc(collection(db, "invites"), {
-                name: nameInput.value.trim(),
-                email: emailInput.value.toLowerCase().trim(),
-                role: roleInput.value,
+            // 1. Create the Invite document (to be checked on invite.html)
+            const inviteRef = await addDoc(collection(db, "invites"), {
+                name: guestName,
+                email: guestEmail,
+                role: guestRole,
                 orgId: orgId,
                 invitedBy: adminEmail,
                 status: 'pending',
                 createdAt: serverTimestamp()
             });
-            alert(`Success! ${nameInput.value} has been invited.`);
+
+            // 2. Build the unique link
+            const inviteLink = `${window.location.origin}/invite.html?invite=${inviteRef.id}`;
+
+            // 3. Create the document in 'mail' to trigger the Firebase extension
+            await addDoc(collection(db, "mail"), {
+                to: guestEmail,
+                message: {
+                    subject: `Invite: Join your team on MergePoint`,
+                    html: `
+                        <div style="font-family: 'Inter', sans-serif; max-width: 600px; margin: auto; padding: 40px 20px; color: #1e293b;">
+                            <h2 style="font-size: 24px; font-weight: 700;">Join Your Team</h2>
+                            <p style="font-size: 16px; line-height: 1.6; color: #64748b;">
+                                Hello ${guestName}, <br><br>
+                                You've been invited to join the <strong>MergePoint</strong> workspace as a <strong>${guestRole.toUpperCase()}</strong>.
+                            </p>
+                            <div style="margin: 32px 0;">
+                                <a href="${inviteLink}" style="background-color: #4f46e5; color: white; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: 600; display: inline-block;">
+                                    Complete Account Setup
+                                </a>
+                            </div>
+                            <p style="font-size: 14px; color: #94a3b8;">
+                                If you did not expect this invitation, you can safely ignore this email.
+                            </p>
+                        </div>
+                    `
+                }
+            });
+
+            alert(`Success! Invitation sent to ${guestEmail}.`);
             inviteForm.reset();
         } catch (error) {
-            alert("Failed to save invitation.");
+            console.error("Invite Process Error:", error);
+            alert("Failed to process invitation. Please try again.");
         }
     };
 }

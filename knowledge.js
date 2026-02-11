@@ -32,17 +32,29 @@ checkAuthState(async (user) => {
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
         const userData = userSnap.data();
-        const isAdmin = userData?.role === 'admin';
+        
+        // Define permissions
+        const userRole = userData?.role || 'standard';
+        const orgId = userData?.orgId || 'default-org';
+        const canManage = (userRole === 'admin' || userRole === 'manager');
 
         const roleEl = document.getElementById('display-role');
-        if (roleEl) roleEl.textContent = userData?.role || 'User';
+        if (roleEl) roleEl.textContent = userRole.charAt(0).toUpperCase() + userRole.slice(1);
 
-        if (isAdmin && uploadTrigger) {
+        // UI RESTRICTION: Only show upload button to Admins/Managers
+        if (canManage && uploadTrigger) {
             uploadTrigger.style.display = 'block';
+        } else if (uploadTrigger) {
+            uploadTrigger.style.display = 'none';
         }
 
-        loadLibrary(user.uid, isAdmin);
-        setupUpload(user.uid);
+        // Load company-wide library (orgId instead of userId)
+        loadLibrary(orgId, canManage);
+        
+        // Setup upload logic with orgId
+        if (canManage) {
+            setupUpload(user.uid, orgId);
+        }
     }
 });
 
@@ -67,7 +79,7 @@ async function deleteFileFromStorage(fileUrl) {
     }
 }
 
-function setupUpload(userId) {
+function setupUpload(userId, orgId) {
     if (!fileInput) return;
 
     fileInput.onchange = async (e) => {
@@ -84,8 +96,9 @@ function setupUpload(userId) {
         statusText.innerText = `Preparing ${categoryLabel}...`;
 
         try {
+            // Delete existing branding for the ORG (not just the user)
             if (isBranding) {
-                const qB = query(collection(db, "knowledge"), where("ownerId", "==", userId), where("category", "==", categoryValue));
+                const qB = query(collection(db, "knowledge"), where("orgId", "==", orgId), where("category", "==", categoryValue));
                 const existingB = await getDocs(qB);
                 for (const d of existingB.docs) {
                     const data = d.data();
@@ -94,11 +107,12 @@ function setupUpload(userId) {
                 }
             }
 
-            const q = query(collection(db, "knowledge"), where("ownerId", "==", userId), where("fileName", "==", file.name));
+            // Version check within the organization
+            const q = query(collection(db, "knowledge"), where("orgId", "==", orgId), where("fileName", "==", file.name));
             const versionSnap = await getDocs(q);
             const nextVersion = versionSnap.size + 1;
 
-            const storagePath = `knowledge/${userId}/${isBranding ? 'branding' : 'v'+nextVersion}_${file.name}`;
+            const storagePath = `knowledge/${orgId}/${isBranding ? 'branding' : 'v'+nextVersion}_${file.name}`;
             const storageRef = ref(storage, storagePath);
             const uploadTask = uploadBytesResumable(storageRef, file);
 
@@ -109,13 +123,14 @@ function setupUpload(userId) {
                 }, 
                 (error) => { 
                     console.error(error); 
-                    showAlert("Upload Failed", "There was an error uploading your file."); // Replacement
+                    showAlert("Upload Failed", "There was an error uploading your file."); 
                 }, 
                 async () => {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
                     const docRef = await addDoc(collection(db, "knowledge"), {
                         ownerId: userId,
+                        orgId: orgId, // CRITICAL: Tag with OrgId for global visibility
                         fileName: file.name,
                         fileUrl: downloadURL,
                         storagePath: storagePath,
@@ -136,7 +151,7 @@ function setupUpload(userId) {
                         if (categoryValue === 'title-page') {
                             openTemplateMapper(downloadURL, docRef.id);
                         } else {
-                            showAlert("Success", `${categoryLabel} successfully updated.`); // Replacement
+                            showAlert("Success", `${categoryLabel} successfully updated for the company library.`);
                         }
                     }, 1000);
                 }
@@ -145,14 +160,16 @@ function setupUpload(userId) {
     };
 }
 
-function loadLibrary(userId, isAdmin) {
+function loadLibrary(orgId, canManage) {
     if (!libraryGrid) return;
-    const q = query(collection(db, "knowledge"), where("ownerId", "==", userId));
+    
+    // FETCH BY ORGID (makes documents global to the company)
+    const q = query(collection(db, "knowledge"), where("orgId", "==", orgId));
 
     onSnapshot(q, (snapshot) => {
         libraryGrid.innerHTML = ''; 
         if (snapshot.empty) {
-            libraryGrid.innerHTML = `<div class="loading-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem;"><p>Your library is empty.</p></div>`;
+            libraryGrid.innerHTML = `<div class="loading-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem;"><p>The company library is currently empty.</p></div>`;
             return;
         }
 
@@ -189,13 +206,13 @@ function loadLibrary(userId, isAdmin) {
                         </p>
                     </div>
                     <div class="bid-footer" style="margin-top: 1.5rem; display: flex; gap: 0.5rem;">
-                        ${isTitlePage && isAdmin ? `
+                        ${isTitlePage && canManage ? `
                             <button class="btn-outline" style="flex: 2; border-color: #4f46e5; color: #4f46e5;" onclick="window.triggerMapper('${data.fileUrl}', '${docId}')">
                                 Map Template
                             </button>
                         ` : ''}
                         <button class="btn-outline" style="flex: 1;" onclick="window.open('${data.fileUrl}', '_blank')">View</button>
-                        ${isAdmin ? `
+                        ${canManage ? `
                             <button class="btn-outline delete-btn" style="flex: 1; border-color: #ff4d4d; color: #ff4d4d;" 
                                 data-id="${docId}" 
                                 data-url="${data.fileUrl}">
@@ -217,10 +234,9 @@ function attachDeleteListeners() {
             const id = e.currentTarget.getAttribute('data-id');
             const fileUrl = e.currentTarget.getAttribute('data-url');
             
-            // 2. Updated: Replaced confirm() with showConfirm()
             const confirmed = await showConfirm(
                 "Delete Document?", 
-                "Are you sure you want to permanently delete this document and its file? This action cannot be undone."
+                "Are you sure you want to permanently delete this document from the company library? This will affect all users."
             );
 
             if (confirmed) {
@@ -230,7 +246,7 @@ function attachDeleteListeners() {
                     console.log("Sync delete successful.");
                 } catch (err) { 
                     console.error("Delete sequence failed:", err); 
-                    showAlert("Delete Error", "Error deleting document. Check console for details."); // Replacement
+                    showAlert("Delete Error", "Error deleting document. Check console for details."); 
                 }
             }
         };
@@ -274,7 +290,7 @@ async function openTemplateMapper(url, docId) {
         });
 
         canvas.onclick = (e) => {
-            if (!activeField) return showAlert("Field Required", "Please select a field button on the right first!"); // Replacement
+            if (!activeField) return showAlert("Field Required", "Please select a field button on the right first!"); 
             const rect = canvas.getBoundingClientRect();
             const xPercent = (e.clientX - rect.left) / canvas.width;
             const yPercent = (e.clientY - rect.top) / canvas.height;
@@ -288,13 +304,13 @@ async function openTemplateMapper(url, docId) {
         };
     } catch (err) {
         console.error("PDF Mapping Error:", err);
-        showAlert("Error", "Failed to load PDF preview."); // Replacement
+        showAlert("Error", "Failed to load PDF preview."); 
     }
 }
 
 document.getElementById('save-mapping-btn').onclick = async () => {
     if (Object.keys(currentMappings).length < 3) {
-        return showAlert("Incomplete Mapping", "Please set positions for all 3 fields before saving."); // Replacement
+        return showAlert("Incomplete Mapping", "Please set positions for all 3 fields before saving."); 
     }
     
     const fontSettings = {
@@ -307,10 +323,10 @@ document.getElementById('save-mapping-btn').onclick = async () => {
             mapping: currentMappings,
             fontStyle: fontSettings
         });
-        showAlert("Mapping Saved", "Template Mapping & Styles have been successfully saved!"); // Replacement
+        showAlert("Mapping Saved", "Template Mapping & Styles have been successfully saved!"); 
         document.getElementById('mapper-modal').style.display = 'none';
     } catch (e) {
-        showAlert("Save Error", "Error saving mapping: " + e.message); // Replacement
+        showAlert("Save Error", "Error saving mapping: " + e.message); 
     }
 };
 

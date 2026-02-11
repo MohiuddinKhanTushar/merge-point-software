@@ -35,30 +35,70 @@ export function initLibrary() {
     const tableBody = document.getElementById('library-body');
     if (!tableBody) return;
 
-    auth.onAuthStateChanged((user) => {
+    // Monitor Auth State and fetch based on Org and Role
+    auth.onAuthStateChanged(async (user) => {
         if (user) {
-            fetchArchivedBids(user.uid);
+            await fetchArchivedBids(user.uid);
         } else {
-            tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:2rem;">Please log in.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2rem;">Please log in.</td></tr>`;
         }
     });
 
     setupListeners();
 }
 
-function fetchArchivedBids(userId) {
-    const archiveQuery = query(
-        collection(db, "archived_rfps"),
-        where("ownerId", "==", userId)
-    );
+/**
+ * Fetches archived documents based on User Role and Organization
+ */
+async function fetchArchivedBids(userId) {
+    try {
+        // 1. Get the user's profile to find their role and orgId
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) {
+            console.error("User profile not found.");
+            return;
+        }
 
-    onSnapshot(archiveQuery, (snapshot) => {
-        allArchiveData = [];
-        snapshot.forEach((doc) => {
-            allArchiveData.push({ id: doc.id, ...doc.data() });
+        const userData = userSnap.data();
+        const orgId = userData.orgId || 'default-org';
+        const userRole = userData.role || 'standard';
+
+        // 2. Build Role-Based Query
+        let archiveQuery;
+        if (userRole === 'admin' || userRole === 'manager') {
+            // Admins see everything in the org
+            archiveQuery = query(
+                collection(db, "archived_rfps"),
+                where("orgId", "==", orgId)
+            );
+        } else {
+            // Standard users only see what they personally archived
+            archiveQuery = query(
+                collection(db, "archived_rfps"),
+                where("orgId", "==", orgId),
+                where("ownerId", "==", userId)
+            );
+        }
+
+        onSnapshot(archiveQuery, (snapshot) => {
+            allArchiveData = [];
+            snapshot.forEach((doc) => {
+                allArchiveData.push({ id: doc.id, ...doc.data() });
+            });
+            renderLibrary(allArchiveData);
+        }, (error) => {
+            console.error("Firestore Permission Error:", error);
+            const tableBody = document.getElementById('library-body');
+            if (tableBody) {
+                tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2rem; color: #ef4444;">Access Denied. Ensure your profile has the correct permissions.</td></tr>`;
+            }
         });
-        renderLibrary(allArchiveData);
-    });
+
+    } catch (err) {
+        console.error("Error initializing library fetch:", err);
+    }
 }
 
 function setupListeners() {
@@ -69,8 +109,8 @@ function setupListeners() {
 }
 
 function performFilter() {
-    const queryStr = document.getElementById('library-search').value.toLowerCase();
-    const industry = document.getElementById('filter-industry').value;
+    const queryStr = document.getElementById('library-search')?.value.toLowerCase() || "";
+    const industry = document.getElementById('filter-industry')?.value || "all";
 
     const filtered = allArchiveData.filter(item => {
         const matchesSearch = (item.bidName || "").toLowerCase().includes(queryStr) || 
@@ -86,7 +126,7 @@ function renderLibrary(data) {
     if (!tableBody) return;
 
     if (data.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:2rem; color: #94a3b8;">No archived documents found.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2rem; color: #94a3b8;">No archived documents found.</td></tr>`;
         return;
     }
 
@@ -156,12 +196,12 @@ window.saveProjectStatus = async () => {
 };
 
 /**
- * RESTORE LOGIC - Using Global showConfirm
+ * RESTORE LOGIC - Moves archive back to bids collection
  */
 window.restoreToActive = async (archiveId) => {
     const confirmed = await showConfirm(
         "Restore to Active?", 
-        "This project will move back to your Dashboard for further editing.",
+        "This project will move back to the Dashboard for further editing.",
         "Restore Project"
     );
 
@@ -172,18 +212,20 @@ window.restoreToActive = async (archiveId) => {
 
             if (archiveSnap.exists()) {
                 const data = archiveSnap.data();
+                
                 await addDoc(collection(db, "bids"), {
                     ...data,
                     status: "review",
                     deadline: serverTimestamp(), 
                     createdAt: serverTimestamp()
                 });
+                
                 await deleteDoc(archiveRef);
                 showAlert("Success", "Project restored to active dashboard.");
             }
         } catch (e) {
             console.error("Restore failed:", e);
-            showAlert("Error", "Failed to restore project: " + e.message);
+            showAlert("Error", "Failed to restore project.");
         }
     }
 };
@@ -192,11 +234,9 @@ window.closeArchiveModal = () => {
     document.getElementById('archive-modal').style.display = 'none'; 
 };
 
-// Handle clicks outside project detail modal
 window.onclick = function(event) {
     const modal = document.getElementById('archive-modal');
     if (event.target === modal) modal.style.display = "none";
 };
 
-// Initialize the library
 initLibrary();

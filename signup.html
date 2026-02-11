@@ -3,43 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finish Registration | MergePoint</title>
-    <link rel="stylesheet" href="style.css">
-
+    <title>Join MergePoint | AI RFP Automation</title>
     <link rel="icon" type="image/png" href="assets/favicon.png">
-    <style>
-        .auth-container { max-width: 400px; margin: 100px auto; padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .auth-header { text-align: center; margin-bottom: 2rem; }
-        .form-group { margin-bottom: 1.5rem; }
-        label { display: block; margin-bottom: 0.5rem; color: #64748b; font-size: 0.9rem; }
-        input { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; }
-        .btn-full { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
-        .error-msg { color: #dc2626; font-size: 0.85rem; margin-top: 1rem; display: none; }
-    </style>
+    <link rel="stylesheet" href="signup-style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-    <div class="auth-container">
-        <div class="auth-header">
-            <h1>Complete Setup</h1>
-            <p>Enter your details to join your team.</p>
-        </div>
-        <form id="signup-form">
-            <div class="form-group">
-                <label>Email Address</label>
-                <input type="email" id="signup-email" required placeholder="name@company.com">
-            </div>
-            <div class="form-group">
-                <label>Create Password</label>
-                <input type="password" id="signup-password" required minlength="6">
-            </div>
-            <button type="submit" class="btn-full">Create Account</button>
-            <p id="error-box" class="error-msg"></p>
-        </form>
-    </div>
+    <header class="page-header">
+        <img src="assets/signup-logo.png" alt="MergePoint Logo" class="nav-logo">
+    </header>
 
-    <script type="module">
-        import { handleSignup } from './signup-manager.js';
-        document.getElementById('signup-form').addEventListener('submit', handleSignup);
-    </script>
+    <main class="auth-container">
+        <div class="branding-section">
+            
+            <h1>The smarter way to <span class="highlight">win bids.</span></h1>
+            <p>Automate your RFP responses with precision AI and join the industry leaders using MergePoint to scale their bid operations.</p>
+        </div>
+
+        <div class="auth-card">
+            <div class="auth-header">
+                <h2 id="signup-title">Create Workspace</h2>
+                <p id="signup-subtitle" class="subtitle">Enter your details to get started.</p>
+            </div>
+
+            <form id="signup-form" class="auth-form">
+                <div class="input-group" id="company-field-group">
+                    <label for="company-name">Company Name</label>
+                    <div class="input-wrapper">
+                        <i data-lucide="building-2"></i>
+                        <input type="text" id="company-name">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="user-name">Full Name</label>
+                    <div class="input-wrapper">
+                        <i data-lucide="user"></i>
+                        <input type="text" id="user-name">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="email">Work Email</label>
+                    <div class="input-wrapper">
+                        <i data-lucide="mail"></i>
+                        <input type="email" id="email">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrapper">
+                        <i data-lucide="lock"></i>
+                        <input type="password" id="password" required minlength="6">
+                    </div>
+                </div>
+
+                <button type="submit" id="submit-btn" class="btn-primary">
+                    Create Account <i data-lucide="sparkles"></i>
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Already using MergePoint? <a href="login.html">Sign In</a></p>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="signup.js"></script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>

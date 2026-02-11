@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Your Team | MergePoint</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="assets/favicon.png">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --text-dark: #1e293b;
+            --text-light: #64748b;
+        }
+
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; background-color: #ffffff; }
+        .split-screen { display: flex; min-height: 100vh; }
+
+        /* Left Side - Matching signup-style.css */
+        .brand-side { 
+            flex: 1; 
+            background-color: #f8fafc; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            padding: 0 10%; 
+            position: relative; 
+        }
+        
+        .logo-container { 
+            position: absolute; 
+            top: 50px; /* Adjusted to match admin style */
+            left: 10%; 
+        }
+
+        /* Logo size matched to your signup-style.css */
+        .logo { 
+            height: 56px; 
+            width: auto;
+            display: block;
+        }
+
+        .hero-content h1 { font-size: 3.5rem; font-weight: 800; color: #0f172a; line-height: 1.1; margin-bottom: 1.5rem; }
+        .hero-content h1 span { color: var(--primary); }
+        .hero-content p { font-size: 1.125rem; color: var(--text-light); max-width: 480px; line-height: 1.6; }
+
+        /* Right Side - Form Container */
+        .form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+        .auth-card { 
+            width: 100%; 
+            max-width: 460px; 
+            padding: 2.5rem; 
+            background: #ffffff; 
+            border-radius: 24px; 
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); 
+            border: 1px solid #f1f5f9; 
+        }
+
+        .auth-header h2 { font-size: 1.875rem; font-weight: 700; color: #0f172a; margin: 0 0 0.5rem; }
+        .auth-header p { color: var(--text-light); margin-bottom: 2rem; font-size: 0.95rem; }
+
+        .badge { display: inline-block; padding: 4px 12px; background: #eef2ff; color: #4338ca; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 1rem; }
+
+        .form-group { margin-bottom: 1.5rem; position: relative; }
+        .input-wrapper { position: relative; display: flex; align-items: center; }
+        .input-icon { position: absolute; left: 12px; color: #94a3b8; width: 20px; height: 20px; }
+        
+        label { display: block; font-size: 0.875rem; font-weight: 600; color: #334155; margin-bottom: 0.5rem; }
+        input { 
+            width: 100%; 
+            padding: 12px 12px 12px 42px; 
+            border: 1.5px solid #e2e8f0; 
+            border-radius: 12px; 
+            font-size: 1rem; 
+            box-sizing: border-box;
+            transition: all 0.2s; 
+        }
+        input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1); }
+        input:read-only { background-color: #f8fafc; color: #94a3b8; }
+
+        .btn-submit { 
+            width: 100%; 
+            padding: 14px; 
+            background-color: var(--primary); 
+            color: white; 
+            border: none; 
+            border-radius: 12px; 
+            font-size: 1rem; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 8px; 
+        }
+        .btn-submit:hover { background-color: var(--primary-hover); transform: translateY(-1px); }
+
+        .login-footer { text-align: center; margin-top: 1.5rem; font-size: 0.875rem; color: var(--text-light); }
+        .login-footer a { color: var(--primary); text-decoration: none; font-weight: 600; }
+
+        .error-container { margin-top: 1.5rem; padding: 12px; background: #fff1f2; border-radius: 10px; display: none; border: 1px solid #ffe4e6; }
+        .error-text { color: #e11d48; font-size: 0.875rem; margin: 0; font-weight: 500; }
+
+        #loader { text-align: center; padding: 3rem 0; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 1000px) { .brand-side { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="split-screen">
+        <div class="brand-side">
+            <div class="logo-container">
+                <img src="assets/signup-logo.png" alt="MergePoint" class="logo">
+            </div>
+            <div class="hero-content">
+                <h1>The smarter way to <span>win bids.</span></h1>
+                <p>Automate your RFP responses with precision AI and join the industry leaders using MergePoint to scale their bid operations.</p>
+            </div>
+        </div>
+
+        <div class="form-side">
+            <div class="auth-card">
+                <div id="loader">
+                    <div class="spinner"></div>
+                    <p style="color: var(--text-light)">Verifying invitation...</p>
+                </div>
+
+                <div id="signup-content" style="display: none;">
+                    <div class="auth-header">
+                        <div id="role-badge"><span class="badge" id="role-text">STANDARD</span></div>
+                        <h2>Complete Setup</h2>
+                        <p>Enter your details to join your team.</p>
+                    </div>
+
+                    <form id="invite-signup-form">
+                        <div class="form-group">
+                            <label>Work Email</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                <input type="email" id="signup-email" readonly>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                                <input type="password" id="signup-password" required minlength="6" placeholder="Create a password">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-submit">
+                            Create Account
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        </button>
+                    </form>
+                    
+                    <div class="login-footer">
+                        Already have an account? <a href="login.html">Sign in</a>
+                    </div>
+                </div>
+
+                <div id="error-box" class="error-container">
+                    <p class="error-text" id="error-message"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initInvitePage, handleSignup } from './invite.js';
+        initInvitePage();
+        document.getElementById('invite-signup-form').addEventListener('submit', handleSignup);
+    </script>
+</body>
+</html>
