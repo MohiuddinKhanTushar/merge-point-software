@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MergePoint | Team Hub</title>
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="icon" type="image/png" href="assets/favicon.png?v=1.1">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+    (function() {
+        const savedName = localStorage.getItem('userDisplayName');
+        const savedInitial = localStorage.getItem('userInitial');
+        if (savedName && savedInitial) {
+            const checkExist = setInterval(function() {
+                const nameEl = document.getElementById('display-name');
+                const avatarEl = document.getElementById('avatar-circle');
+                if (nameEl && avatarEl) {
+                    nameEl.textContent = savedName;
+                    avatarEl.textContent = savedInitial;
+                    clearInterval(checkExist);
+                }
+            }, 5);
+        }
+        
+        const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+        if (isCollapsed) {
+            document.documentElement.classList.add('sidebar-is-collapsed');
+        }
+    })();
+    </script>
+</head>
+<body>
+    
+    <div class="dashboard-container">
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+                <a href="index.html">
+                    <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+                </a>
+            </div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+            
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li class="active"><a href="team-hub.html"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+                    <div class="avatar" id="avatar-circle">?</div>
+                    <div class="user-info">
+                        <span class="user-name" id="display-name">Loading...</span>
+                        <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Manager</span>
+                    </div>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="welcome-text">
+                    <h1>Team Hub</h1>
+                    <p>Oversee and approve pending tender responses.</p>
+                </div>
+            </header>
+
+            <section class="stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h3 style="font-size: 0.9rem; color: #64748b;">Awaiting Your Review</h3>
+                    <p id="pending-count" style="font-size: 2rem; font-weight: 700; color: var(--primary); margin-top: 0.5rem;">--</p>
+                </div>
+                <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h3 style="font-size: 0.9rem; color: #64748b;">Average Review Time</h3>
+                    <p style="font-size: 2rem; font-weight: 700; color: var(--primary); margin-top: 0.5rem;">4.2h</p>
+                </div>
+                <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h3 style="font-size: 0.9rem; color: #64748b;">Approved (This Week)</h3>
+                    <p style="font-size: 2rem; font-weight: 700; color: #10b981; margin-top: 0.5rem;">28</p>
+                </div>
+            </section>
+
+            <section class="active-projects">
+                <div class="section-header" style="margin-bottom: 1.5rem;">
+                    <h2 style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">Tenders Awaiting Review</h2>
+                </div>
+                
+                <div class="table-container" style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead style="background: #f8fafc;">
+                            <tr>
+                                <th style="padding: 1rem; border-bottom: 2px solid #e2e8f0; color: #64748b;">Tender Name</th>
+                                <th style="padding: 1rem; border-bottom: 2px solid #e2e8f0; color: #64748b;">Submitted By</th>
+                                <th style="padding: 1rem; border-bottom: 2px solid #e2e8f0; color: #64748b;">Submitted Date</th>
+                                <th style="padding: 1rem; border-bottom: 2px solid #e2e8f0; color: #64748b;">Deadline</th>
+                                <th style="padding: 1rem; border-bottom: 2px solid #e2e8f0; color: #64748b;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="review-table-body">
+                            <tr>
+                                <td colspan="5" style="padding: 2rem; text-align: center; color: #94a3b8;">
+                                    <div class="loading-spinner"></div>
+                                    Loading reviews...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>lucide.createIcons();</script>
+    <script type="module" src="team-hub.js"></script>
+</body>
+</html>

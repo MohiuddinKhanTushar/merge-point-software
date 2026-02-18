@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings | MergePoint</title>
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="icon" type="image/png" href="assets/favicon.png?v=1.1">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+    (function() {
+        const savedName = localStorage.getItem('userDisplayName');
+        const savedInitial = localStorage.getItem('userInitial');
+        
+        if (savedName && savedInitial) {
+            const checkExist = setInterval(function() {
+                const nameEl = document.getElementById('display-name');
+                const avatarEl = document.getElementById('avatar-circle');
+                
+                if (nameEl && avatarEl) {
+                    nameEl.textContent = savedName;
+                    avatarEl.textContent = savedInitial;
+                    clearInterval(checkExist);
+                }
+            }, 5);
+        }
+    })();
+</script>
+
+    <script>
+        (function() {
+            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+            if (isCollapsed) {
+                document.documentElement.classList.add('sidebar-is-collapsed');
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div class="dashboard-container" id="settings-page-content" style="display: none;">
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+                <a href="dashboard.html">
+                    <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+                </a>
+            </div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+        
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li><a href="team-hub.html"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li class="active"><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+                    <div class="avatar" id="avatar-circle">?</div>
+                    <div class="user-info">
+                        <span class="user-name" id="display-name">Loading...</span>
+                        <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
+                    </div>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="welcome-text">
+                    <h1>Global Settings</h1>
+                    <p>Manage organization roles and review requirements.</p>
+                </div>
+            </header>
+
+            <div style="padding: 2rem;">
+                <div class="card" style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; padding: 1.5rem;">
+                    <div>
+                        <h3 style="margin: 0;">Require Review Process</h3>
+                        <p style="font-size: 0.85rem; color: #64748b; margin: 4px 0 0 0;">Force all bids to be approved by a Manager/Admin.</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="review-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="card" style="margin-bottom: 2rem; padding: 1.5rem;">
+                    <h3>Invite Team Member</h3>
+                    <form id="invite-form" style="display: flex; gap: 10px; margin-top: 1rem;">
+                        <input type="text" id="invite-name" placeholder="Full Name" required 
+                               style="flex: 0.5; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                        <input type="email" id="invite-email" placeholder="employee@company.com" required 
+                               style="flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                        <select id="invite-role" style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                            <option value="standard">Standard</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <button type="submit" class="btn-primary" style="padding: 10px 20px;">Add Member</button>
+                    </form>
+                </div>
+
+                <div class="card" style="margin-top: 2rem; padding: 1.5rem; margin-bottom: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">Pending Invitations</h3>
+                    <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                        <thead>
+                            <tr style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">
+                                <th style="padding: 12px; width: 40%;">User</th>
+                                <th style="padding: 12px; width: 30%;">Role</th>
+                                <th style="padding: 12px; width: 30%; text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-invite-list"></tbody>
+                    </table>
+                </div>
+
+                <div class="card" style="padding: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem;">Team Access</h3>
+                    <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                        <thead>
+                            <tr style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">
+                                <th style="padding: 12px; width: 40%;">User</th>
+                                <th style="padding: 12px; width: 30%;">Role</th>
+                                <th style="padding: 12px; width: 30%; text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-list"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div> 
+
+    <script>lucide.createIcons();</script>
+    
+    <script type="module">
+        import { checkAuthState } from './auth.js';
+        import { initSidebar } from './ui-manager.js';
+        import { initSettings } from './settings.js';
+        
+        // 1. Setup sidebar interaction
+        initSidebar();
+
+        // 2. Protect page and update User UI
+        checkAuthState((user) => {
+            initSettings();
+        });
+    </script>
+
+    <div id="custom-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:white; padding:2rem; border-radius:12px; max-width:400px; width:90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+            <h3 id="modal-title" style="margin-top:0; color:#1e293b;">Confirm Action</h3>
+            <p id="modal-body" style="color:#64748b; line-height:1.5; margin: 1rem 0 2rem 0;"></p>
+            <div style="display:flex; gap:12px; justify-content:flex-end;">
+                <button id="modal-cancel" style="padding:8px 16px; background:#f1f5f9; border:none; border-radius:6px; cursor:pointer; color:#475569; font-weight:600;">Cancel</button>
+                <button id="modal-confirm" style="padding:8px 16px; background:#dc2626; border:none; border-radius:6px; cursor:pointer; color:white; font-weight:600;">Confirm</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

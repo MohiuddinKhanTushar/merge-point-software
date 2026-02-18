@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MergePoint | AI RFP Platform</title>
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="icon" type="image/png" href="assets/favicon.png?v=1.1">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+
+    <script>
+    (function() {
+        const savedName = localStorage.getItem('userDisplayName');
+        const savedInitial = localStorage.getItem('userInitial');
+        
+        if (savedName && savedInitial) {
+            const checkExist = setInterval(function() {
+                const nameEl = document.getElementById('display-name');
+                const avatarEl = document.getElementById('avatar-circle');
+                
+                if (nameEl && avatarEl) {
+                    nameEl.textContent = savedName;
+                    avatarEl.textContent = savedInitial;
+                    clearInterval(checkExist);
+                }
+            }, 5);
+        }
+    })();
+    </script>
+
+    <script>
+        (function() {
+            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+            if (isCollapsed) {
+                document.documentElement.classList.add('sidebar-is-collapsed');
+            }
+        })();
+    </script>
+
+    <style>
+        .category-selection {
+            max-width: 400px;
+            margin: 0 auto 1.5rem auto;
+            text-align: left;
+        }
+        .category-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-main);
+        }
+        .styled-select {
+            width: 100%;
+            padding: 0.8rem;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+            font-size: 0.95rem;
+            color: #1e293b;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .styled-select:focus {
+            outline: none;
+            border-color: var(--primary-color, #4f46e5);
+        }
+        .category-hint {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .priority-card {
+            border-left: 4px solid #059669 !important;
+        }
+        .branding-card {
+            border-left: 4px solid #8b5cf6 !important; /* Purple for branding */
+        }
+
+        /* --- Mapper Modal Styles --- */
+        .modal { display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.85); backdrop-filter: blur(4px); }
+        .modal-content { background:#fff; margin:2% auto; padding:24px; width:95%; max-width:1100px; border-radius:16px; display:flex; gap:24px; height: 85vh; }
+        .field-btn { width:100%; padding:12px; margin-bottom:10px; text-align:left; border:2px solid #e2e8f0; border-radius:8px; cursor:pointer; transition: all 0.2s; background: white; font-weight: 600; }
+        .field-btn.active { border-color: #4f46e5; background: #f5f3ff; color: #4f46e5; }
+        .coord-tag { float: right; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; color: #64748b; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+                <a href="dashboard.html">
+                    <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+                </a>
+            </div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+            
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li class="active"><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li><a href="team-hub.html"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+                    <div class="avatar" id="avatar-circle">?</div>
+                    <div class="user-info">
+                        <span class="user-name" id="display-name">Loading...</span>
+                        <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
+                    </div>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="welcome-text">
+                    <h1>Knowledge Base</h1>
+                    <p>Manage the documents that power your AI RFP drafts.</p>
+                </div>
+            </header>
+
+            <section class="hero-action-card">
+                <div class="action-content">
+                    <div class="text-group">
+                        <h2>Living Knowledge Base</h2>
+                        <p>Upload core documents or branding assets. Branding assets (Title/Contact pages) are used for final document generation and are ignored by the AI drafting engine.</p>
+                    </div>
+                    <button class="btn-hero" id="knowledge-upload-trigger" style="display: none;">
+                        <i data-lucide="database"></i> Manage Documents
+                    </button>
+                </div>
+
+                <div class="upload-zone" id="knowledge-upload-section">
+                    <div class="upload-header">
+                        <i data-lucide="file-up" class="upload-icon"></i>
+                        <h3>Upload Knowledge Source</h3>
+                        <p>Supports PDF or DOCX (Branding pages can be PDF or Images)</p>
+                    </div>
+                    
+                    <div class="category-selection">
+                        <label for="doc-category" class="category-label">Document Category</label>
+                        <select id="doc-category" class="styled-select">
+                            <optgroup label="AI Knowledge (Drafting)">
+                                <option value="master" data-priority="1">Master Reference (Foundation)</option>
+                                <option value="policy" data-priority="2">Company Policy</option>
+                                <option value="case-study" data-priority="3">Case Study / Evidence</option>
+                                <option value="update" data-priority="5">Product / Feature Update (Priority)</option>
+                            </optgroup>
+                            <optgroup label="Branding (Final PDF Only)">
+                                <option value="title-page" data-priority="0">Front/Title Page (No AI)</option>
+                                <option value="contact-page" data-priority="0">Contact Us Page (No AI)</option>
+                            </optgroup>
+                        </select>
+                        <div class="category-hint">
+                            <i data-lucide="info" style="width:14px; height:14px;"></i> 
+                            Branding assets are excluded from AI drafting.
+                        </div>
+                    </div>
+
+                    <div class="drop-area">
+                        <input type="file" id="knowledge-file-input" hidden accept=".pdf,.docx,.jpg,.png">
+                        <button class="btn-secondary" onclick="document.getElementById('knowledge-file-input').click()">
+                            Select File to Upload
+                        </button>
+                        <div id="knowledge-file-list"></div>
+                    </div>
+
+                    <div id="knowledge-progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div id="knowledge-progress-fill"></div>
+                        </div>
+                        <p id="knowledge-status-text">Uploading to Library...</p>
+                    </div>
+                </div>
+            </section> 
+
+            <section class="active-bids-list">
+                <div class="section-header">
+                    <div class="title-group">
+                        <h2>Your Library</h2>
+                    </div>
+                </div>
+                <div id="library-grid" class="bids-grid">
+                    <p class="loading-state">Loading library...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="mapper-modal" class="modal">
+        <div class="modal-content">
+            <div style="flex: 2; position: relative; background: #f8fafc; overflow: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
+                <canvas id="pdf-canvas" style="display:block; margin: 0 auto; cursor: crosshair;"></canvas>
+            </div>
+
+            <div style="flex: 1; display:flex; flex-direction:column; gap:20px;">
+                <div>
+                    <h3 style="margin-bottom: 8px;">Map Template Fields</h3>
+                    <p style="font-size:0.85rem; color:#64748b;">
+                        1. Select a field button below.<br>
+                        2. Click the document where that text should appear.
+                    </p>
+                </div>
+                
+                <div id="field-selectors">
+    <button class="field-btn" data-field="tenderName">Project Title <span class="coord-tag" id="tag-tenderName">Not Set</span></button>
+    <button class="field-btn" data-field="userName">User Name <span class="coord-tag" id="tag-userName">Not Set</span></button>
+    <button class="field-btn" data-field="date">Current Date <span class="coord-tag" id="tag-date">Not Set</span></button>
+</div>
+
+<hr style="border:0; border-top:1px solid #e2e8f0; margin: 10px 0;">
+
+<div id="font-config" style="background: #f1f5f9; padding: 15px; border-radius: 12px;">
+    <h4 style="margin-bottom: 10px; font-size: 0.9rem;">Global Font Styling</h4>
+    
+    <div style="margin-bottom: 10px;">
+        <label style="font-size: 0.75rem; color: #64748b; display: block; margin-bottom: 4px;">Font Family</label>
+        <select id="map-font-family" class="styled-select" style="padding: 0.5rem; font-size: 0.85rem;">
+            <option value="helvetica">Helvetica (Standard)</option>
+            <option value="times">Times New Roman</option>
+            <option value="courier">Courier (Monospace)</option>
+        </select>
+    </div>
+
+    <div>
+        <label style="font-size: 0.75rem; color: #64748b; display: block; margin-bottom: 4px;">Title Font Size (px)</label>
+        <input type="number" id="map-font-size" value="20" min="8" max="72" class="styled-select" style="padding: 0.5rem; font-size: 0.85rem;">
+    </div>
+</div>
+
+                <div style="margin-top:auto; display:flex; flex-direction:column; gap:12px;">
+                    <button id="save-mapping-btn" class="btn-hero" style="width:100%;">Save Mapping</button>
+                    <button id="close-mapper" class="btn-outline" style="width:100%;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="knowledge.js"></script>
+</body>
+</html>

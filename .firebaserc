@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "merge-point-software"
-  }
+  },
+  "targets": {
+    "merge-point-software": {
+      "hosting": {
+        "webapp": [
+          "mergepoint-software"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

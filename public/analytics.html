@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics | MergePoint</title>
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="icon" type="image/png" href="assets/favicon.png?v=1.1">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+    // This runs INSTANTLY before the rest of the page loads
+    (function() {
+        const savedName = localStorage.getItem('userDisplayName');
+        const savedInitial = localStorage.getItem('userInitial');
+        
+        if (savedName && savedInitial) {
+            // We use a small interval just to ensure the DOM elements exist
+            const checkExist = setInterval(function() {
+                const nameEl = document.getElementById('display-name');
+                const avatarEl = document.getElementById('avatar-circle');
+                
+                if (nameEl && avatarEl) {
+                    nameEl.textContent = savedName;
+                    avatarEl.textContent = savedInitial;
+                    clearInterval(checkExist);
+                }
+            }, 5); // Checks every 5ms
+        }
+    })();
+</script>
+
+    <script>
+        (function() {
+            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+            if (isCollapsed) {
+                document.documentElement.classList.add('sidebar-is-collapsed');
+            }
+        })();
+    </script>
+</head>
+<body>
+    
+    <div class="dashboard-container">
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+    <a href="dashboard.html">
+        <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+    </a>
+</div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+        
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <li class="active"><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li><a href="team-hub.html"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+        <div class="avatar" id="avatar-circle">?</div>
+        <div class="user-info">
+            <span class="user-name" id="display-name">Loading...</span>
+            <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
+        </div>
+    </div>
+    <ul class="nav-links logout-nav">
+        <li>
+            <a href="#" id="logout-btn" class="logout-link">
+                <i data-lucide="log-out"></i> <span>Logout</span>
+            </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="welcome-text">
+                    <h1>Performance Analytics</h1>
+                    <p>Track your win rates and pipeline efficiency.</p>
+                </div>
+            </header>
+
+            <div class="stats-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 2rem 0;">
+                <div class="card stat-card">
+                    <span class="label">Total Win Rate</span>
+                    <h2 id="stat-win-rate">--%</h2>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">Active Pipeline</span>
+                    <h2 id="stat-active-count">--</h2>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">Total Won</span>
+                    <h2 id="stat-total-won">--</h2>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">Total Lost</span>
+                    <h2 id="stat-total-lost">--</h2>
+                </div>
+            </div>
+
+            <div class="analytics-grid">
+    <div class="card chart-container">
+        <h3>Win/Loss Trends</h3>
+        <div class="chart-wrapper">
+            <canvas id="winLossChart"></canvas>
+        </div>
+    </div>
+    <div class="card chart-container">
+        <h3>Industry Distribution</h3>
+        <div class="chart-wrapper">
+            <canvas id="industryChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="secondary-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+    <div class="card" style="padding: 1.5rem; min-height: 300px;">
+        <h3 style="margin-bottom: 1rem; font-size: 1rem;">Industry Strength</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+                <tr style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding-bottom: 8px;">Industry</th>
+                    <th style="padding-bottom: 8px;">Wins</th>
+                    <th style="padding-bottom: 8px; text-align: right;">Success</th>
+                </tr>
+            </thead>
+            <tbody id="industry-table-body">
+                </tbody>
+        </table>
+    </div>
+
+    <div class="card" style="padding: 1.5rem;">
+        <h3 style="margin-bottom: 1rem; font-size: 1rem;">Recent Successes</h3>
+        <div id="recent-wins-list" style="display: flex; flex-direction: column; gap: 12px;">
+            </div>
+    </div>
+</div>
+
+        </main>
+    </div> 
+    
+
+    <script>lucide.createIcons();</script>
+    
+    <script type="module">
+        import { initAnalytics } from './analytics-manager.js';
+        initAnalytics();
+    </script>
+</body>
+</html>

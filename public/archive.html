@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFP Library | MergePoint</title>
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="icon" type="image/png" href="assets/favicon.png?v=1.1">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+    // This runs INSTANTLY before the rest of the page loads
+    (function() {
+        const savedName = localStorage.getItem('userDisplayName');
+        const savedInitial = localStorage.getItem('userInitial');
+        
+        if (savedName && savedInitial) {
+            // We use a small interval just to ensure the DOM elements exist
+            const checkExist = setInterval(function() {
+                const nameEl = document.getElementById('display-name');
+                const avatarEl = document.getElementById('avatar-circle');
+                
+                if (nameEl && avatarEl) {
+                    nameEl.textContent = savedName;
+                    avatarEl.textContent = savedInitial;
+                    clearInterval(checkExist);
+                }
+            }, 5); // Checks every 5ms
+        }
+    })();
+</script>
+
+    <script>
+        (function() {
+            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+            if (isCollapsed) {
+                document.documentElement.classList.add('sidebar-is-collapsed');
+            }
+        })();
+    </script>
+</head>
+<body>
+    
+    <div class="dashboard-container">
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+    <a href="dashboard.html">
+        <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+    </a>
+</div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+    
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li class="active"><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <li><a href="analytics.html"><i data-lucide="bar-chart-3"></i><span>Analytics</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li><a href="team-hub.html"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+                    <div class="avatar" id="avatar-circle">?</div>
+                    <div class="user-info">
+                        <span class="user-name" id="display-name">Loading...</span>
+                        <span class="user-role" id="display-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Role</span>
+                    </div>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="section-header">
+                <div class="title-group">
+                    <h1>RFP Library</h1>
+                    <span class="badge" id="archive-count">Historical Archive</span>
+                </div>
+                <div class="archive-actions">
+                    <button class="btn-secondary-outline">
+                        <i data-lucide="download"></i> Export CSV
+                    </button>
+                </div>
+            </header>
+
+            <div class="card search-filter-bar">
+                <div class="search-input-wrapper">
+                    <i data-lucide="search"></i>
+                    <input type="text" id="library-search" placeholder="Search past proposals...">
+                </div>
+                <select id="filter-industry">
+                    <option value="all">All Industries</option>
+                    <option value="tech">Tech</option>
+                    <option value="medical">Medical</option>
+                </select>
+            </div>
+
+            <div class="card library-card">
+                <div style="overflow-x: auto;"> 
+                    <table class="library-table">
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Client</th>
+                                <th>Industry</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th style="text-align: right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="library-body">
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                                    Loading archived documents...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div> 
+
+    <div id="archive-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-project-name">Project Details</h2>
+                <button class="close-modal" onclick="closeArchiveModal()">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div style="display: flex; gap: 20px; margin-bottom: 1.5rem;">
+                    <div>
+                        <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Client</span>
+                        <p id="modal-client" style="font-weight: 600; margin: 4px 0 0 0;"></p>
+                    </div>
+                    <div>
+                        <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Industry</span>
+                        <p id="modal-industry" style="font-weight: 600; margin: 4px 0 0 0;"></p>
+                    </div>
+                </div>
+
+                <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Document Summary</span>
+                <div id="modal-text" class="summary-box" style="margin-bottom: 1.5rem;"></div>
+
+                <div class="status-selector-group" style="padding-top: 1.5rem; border-top: 1px solid #f1f5f9;">
+                    <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #64748b; margin-bottom: 0.5rem;">
+                        Final Outcome
+                    </label>
+                    <div style="display: flex; gap: 10px;">
+                        <select id="modal-status-select" class="btn-secondary-outline" style="flex: 1; height: 42px; text-align: left;">
+                            <option value="pending">⏳ Pending Decision</option>
+                            <option value="won">🏆 Won (Contract Awarded)</option>
+                            <option value="lost">❌ Lost</option>
+                        </select>
+                        <button class="btn-hero" onclick="saveProjectStatus()" style="padding: 0 1.5rem; height: 42px; font-size: 0.9rem;">
+                            Save Status
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn-secondary-outline" onclick="closeArchiveModal()">Close</button>
+                <button class="btn-primary">Download PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div class="modal-header" style="justify-content: center; border: none;">
+                <i data-lucide="alert-circle" style="width: 48px; height: 48px; color: var(--primary); margin-bottom: 1rem;"></i>
+            </div>
+            <h2 id="confirm-title">Are you sure?</h2>
+            <p id="confirm-message" style="color: #64748b; margin-bottom: 2rem;">This action cannot be undone easily.</p>
+            
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-secondary-outline" style="flex: 1;" onclick="closeConfirmModal()">Cancel</button>
+                <button id="confirm-action-btn" class="btn-hero" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>lucide.createIcons();</script>
+    
+    <script type="module">
+        import { checkAuthState } from './auth.js';
+        import { initLibrary } from './library-manager.js';
+        import { initSidebar } from './ui-manager.js';
+
+        // 1. Setup sidebar interaction
+        initSidebar();
+
+        // 2. Protect page and update User UI
+        checkAuthState((user) => {
+            // Once authenticated, load the library data
+            initLibrary();
+        });
+    </script>
+</body>
+</html>

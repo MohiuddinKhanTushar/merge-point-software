@@ -11,7 +11,21 @@
         "firebase-debug.*.log",
         "*.local"
       ]
-
     }
-  ]
+  ],
+  "hosting": {
+    "target": "webapp",
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
 }

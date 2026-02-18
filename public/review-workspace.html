@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MergePoint | Reviewer Workspace</title>
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="icon" type="image/png" href="assets/favicon.png?v=1.1">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        // INSTANT LOAD: Sidebar and User Profile persistence
+        (function() {
+            const savedName = localStorage.getItem('userDisplayName');
+            const savedInitial = localStorage.getItem('userInitial');
+            if (savedName && savedInitial) {
+                const checkExist = setInterval(function() {
+                    const nameEl = document.getElementById('display-name');
+                    const avatarEl = document.getElementById('avatar-circle');
+                    if (nameEl && avatarEl) {
+                        nameEl.textContent = savedName;
+                        avatarEl.textContent = savedInitial;
+                        clearInterval(checkExist);
+                    }
+                }, 5);
+            }
+
+            const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+            if (isCollapsed) {
+                document.documentElement.classList.add('sidebar-is-collapsed');
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+                <a href="index.html">
+                    <img src="assets/mergepoint-logo2.png" alt="MergePoint" class="logo-img">
+                </a>
+            </div>
+            <button id="sidebar-toggle" class="toggle-btn">
+                <i data-lucide="chevron-left"></i>
+            </button>
+            
+            <ul class="nav-links">
+                <li><a href="index.html"><i data-lucide="clipboard-list"></i> <span>Active Bids</span></a></li>
+                <li><a href="knowledge.html"><i data-lucide="book-open"></i> <span>Knowledge Base</span></a></li>
+                <li><a href="archive.html"><i data-lucide="archive"></i> <span>RFP Library</span></a></li>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
+                <li class="active"><a href="team-hub.html"><i data-lucide="users"></i> <span>Team Hub</span></a></li>
+                <li><a href="settings.html"><i data-lucide="sliders"></i> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-mini">
+                    <div class="avatar" id="avatar-circle">?</div>
+                    <div class="user-info">
+                        <span class="user-name" id="display-name">Loading...</span>
+                        <span class="user-role" style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block;">Manager</span>
+                    </div>
+                </div>
+                <ul class="nav-links logout-nav">
+                    <li>
+                        <a href="#" id="logout-btn" class="logout-link">
+                            <i data-lucide="log-out"></i> <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="workspace-nav-header">
+                    <div class="title-group">
+                        <a href="team-hub.html" style="color: #64748b; margin-right: 1rem;"><i data-lucide="arrow-left"></i></a>
+                        <h1 id="bid-title">Review: Loading...</h1>
+                        <span class="status-tag" style="background: #fee2e2; color: #ef4444;">UNDER REVIEW</span>
+                    </div>
+                    
+                    <div class="header-actions">
+                        <button class="btn-secondary-outline" id="save-progress-btn">
+                            <i data-lucide="save"></i> Save Progress
+                        </button>
+                        <button class="btn-primary" id="finalize-bid-btn" style="background: #10b981; border-color: #10b981;">
+                            <i data-lucide="check-check"></i> Finalize & Approve
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="workspace-layout">
+                <aside class="workspace-sidebar" style="border-right: 1px solid var(--border); border-left: none;">
+                    <div class="insight-card sections-container">
+                        <h3><i data-lucide="list-checks"></i> Pending Questions</h3>
+                        <div id="review-questions-list" class="sections-menu">
+                            <p class="loading-text">Loading RFP questions...</p>
+                        </div>
+                    </div>
+                </aside>
+
+                <section class="editor-container">
+                    <div class="review-header-box" style="padding: 1.5rem; background: #f8fafc; border-bottom: 1px solid var(--border);">
+                        <label style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Original Question</label>
+                        <p id="active-question-text" style="font-size: 1.1rem; font-weight: 500; color: #1e293b; margin-top: 0.5rem;">Select a question to start the review process.</p>
+                    </div>
+
+                    <div class="editor-toolbar" style="border-top: none;">
+                        <div class="text-tools">
+                            <span style="font-size: 0.85rem; color: #64748b; font-weight: 600;">AI Suggestion</span>
+                        </div>
+                        <div class="ai-badge" style="background: #eff6ff; color: #2563eb; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 5px;">
+                            <i data-lucide="sparkles" style="width: 14px;"></i> High Confidence
+                        </div>
+                    </div>
+
+                    <textarea id="review-editor" placeholder="AI content will appear here for your approval..."></textarea>
+                    
+                    <div class="editor-footer">
+                        <div class="action-buttons-group" style="display: flex; gap: 1rem;">
+                            <button class="btn-secondary-outline" id="reject-btn" style="color: #ef4444; border-color: #fecaca;">
+                                <i data-lucide="x-circle"></i> Flag for Rewrite
+                            </button>
+                            <button class="btn-primary" id="approve-single-btn">
+                                <i data-lucide="check-circle"></i> Approve Answer
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>lucide.createIcons();</script>
+    <script type="module" src="review-workspace.js"></script>
+</body>
+</html>
