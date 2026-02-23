@@ -31,11 +31,23 @@ checkAuthState(async (user) => {
     if (user) {
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) {
+            console.error("User profile not found in Firestore.");
+            return;
+        }
+
         const userData = userSnap.data();
         
-        // Define permissions
         const userRole = userData?.role || 'standard';
-        const orgId = userData?.orgId || 'default-org';
+        const orgId = userData?.orgId;
+
+        if (!orgId) {
+            console.error("User has no assigned organization. Uploads disabled.");
+            showAlert("Account Error", "Your account is not linked to an organization. Please contact support.");
+            return;
+        }
+
         const canManage = (userRole === 'admin' || userRole === 'manager');
 
         const roleEl = document.getElementById('display-role');
@@ -51,7 +63,7 @@ checkAuthState(async (user) => {
         // Load company-wide library (orgId instead of userId)
         loadLibrary(orgId, canManage);
         
-        // Setup upload logic with orgId
+        // Setup upload logic with the user's UID and their Org ID
         if (canManage) {
             setupUpload(user.uid, orgId);
         }
@@ -96,7 +108,7 @@ function setupUpload(userId, orgId) {
         statusText.innerText = `Preparing ${categoryLabel}...`;
 
         try {
-            // Delete existing branding for the ORG (not just the user)
+            // Delete existing branding for the ORG
             if (isBranding) {
                 const qB = query(collection(db, "knowledge"), where("orgId", "==", orgId), where("category", "==", categoryValue));
                 const existingB = await getDocs(qB);
@@ -112,7 +124,9 @@ function setupUpload(userId, orgId) {
             const versionSnap = await getDocs(q);
             const nextVersion = versionSnap.size + 1;
 
-            const storagePath = `knowledge/${orgId}/${isBranding ? 'branding' : 'v'+nextVersion}_${file.name}`;
+            // BACKEND SYNC: Use userId in the storage path so index.js can process it.
+            // But we still store orgId in the Firestore document for company-wide access.
+            const storagePath = `knowledge/${userId}/${isBranding ? 'branding' : 'v'+nextVersion}_${file.name}`;
             const storageRef = ref(storage, storagePath);
             const uploadTask = uploadBytesResumable(storageRef, file);
 
@@ -122,15 +136,20 @@ function setupUpload(userId, orgId) {
                     progressFill.style.width = progress + '%';
                 }, 
                 (error) => { 
-                    console.error(error); 
-                    showAlert("Upload Failed", "There was an error uploading your file."); 
+                    console.error("Storage Error:", error);
+                    progressContainer.style.display = 'none';
+                    if (error.code === 'storage/unauthorized') {
+                        showAlert("Permission Denied", "Firebase Storage denied the upload. Please check your Storage Rules and ensure the path matches your UID.");
+                    } else {
+                        showAlert("Upload Failed", "There was an error uploading your file: " + error.message); 
+                    }
                 }, 
                 async () => {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
                     const docRef = await addDoc(collection(db, "knowledge"), {
                         ownerId: userId,
-                        orgId: orgId, // CRITICAL: Tag with OrgId for global visibility
+                        orgId: orgId, 
                         fileName: file.name,
                         fileUrl: downloadURL,
                         storagePath: storagePath,
@@ -147,6 +166,7 @@ function setupUpload(userId, orgId) {
                         progressContainer.style.display = 'none';
                         progressFill.style.width = '0%';
                         uploadSection.style.display = 'none'; 
+                        fileInput.value = ''; // Clear file input
                         
                         if (categoryValue === 'title-page') {
                             openTemplateMapper(downloadURL, docRef.id);
@@ -156,14 +176,16 @@ function setupUpload(userId, orgId) {
                     }, 1000);
                 }
             );
-        } catch (error) { console.error(error); }
+        } catch (error) { 
+            console.error("Firestore Init Error:", error); 
+            progressContainer.style.display = 'none';
+        }
     };
 }
 
 function loadLibrary(orgId, canManage) {
     if (!libraryGrid) return;
     
-    // FETCH BY ORGID (makes documents global to the company)
     const q = query(collection(db, "knowledge"), where("orgId", "==", orgId));
 
     onSnapshot(q, (snapshot) => {
@@ -254,7 +276,6 @@ function attachDeleteListeners() {
 }
 
 // --- TEMPLATE MAPPER FUNCTIONS ---
-
 window.triggerMapper = openTemplateMapper;
 
 async function openTemplateMapper(url, docId) {
