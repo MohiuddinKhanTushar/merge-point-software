@@ -121,15 +121,23 @@ export async function logoutUser() {
 export function checkAuthState(callback) {
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            // Fetch the latest profile data
+            // 1. Fetch the latest profile data
             const userRef = doc(db, "users", user.uid);
             const userSnap = await getDoc(userRef);
-            const profile = userSnap.exists() ? userSnap.data() : null;
+            
+            // 2. CRITICAL CHECK: If document is gone, the user was removed by an admin
+            if (!userSnap.exists()) {
+                console.warn("User profile not found in Firestore. Revoking session...");
+                await logoutUser();
+                return;
+            }
 
-            // Update the Global Sidebar UI & update localStorage
+            const profile = userSnap.data();
+
+            // 3. Update the Global Sidebar UI & update localStorage
             updateSidebarUI(user, profile);
 
-            // GLOBAL LOGOUT ATTACHMENT
+            // 4. GLOBAL LOGOUT ATTACHMENT
             const logoutBtn = document.getElementById('logout-btn');
             if (logoutBtn) {
                 logoutBtn.onclick = async (e) => {
@@ -146,7 +154,8 @@ export function checkAuthState(callback) {
             localStorage.removeItem('userRole');
 
             const path = window.location.pathname;
-            if (!path.includes('login.html') && !path.includes('signup.html')) {
+            // Allow access to login, signup, and the invite page without being logged in
+            if (!path.includes('login.html') && !path.includes('signup.html') && !path.includes('invite.html')) {
                 window.location.href = 'login.html';
             }
         }

@@ -1,5 +1,6 @@
 import { db } from './firebase-config.js';
 import { checkAuthState } from './auth.js';
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 import { 
     doc, 
     getDoc, 
@@ -13,6 +14,9 @@ import {
     deleteDoc,
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// FIXED: Explicitly set region to us-east1 to match index.js
+const functions = getFunctions(db.app, 'us-east1');
 
 export function initSettings() {
     console.log("Settings initialization started...");
@@ -56,7 +60,6 @@ export function initSettings() {
             setupReviewToggle(orgId);
             loadUsers(orgId, user.uid); 
             loadPendingInvites(orgId);
-            // Pass the Admin's name so the email feels personal
             setupInviteForm(orgId, userData.displayName || user.email); 
 
         } catch (error) {
@@ -118,11 +121,20 @@ function loadUsers(orgId, currentUserUid) {
     });
 }
 
+// THIS IS THE ONLY VERSION OF removeUser THAT SHOULD EXIST
 async function removeUser(uid) {
     try {
-        await deleteDoc(doc(db, "users", uid));
+        const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
+        console.log(`Attempting to delete user ${uid}...`);
+        
+        const result = await deleteUserAccount({ uid: uid });
+
+        if (result.data.success) {
+            alert("User has been fully removed from the system.");
+        }
     } catch (e) {
         console.error("Remove User Error:", e);
+        alert("Error removing user: " + e.message);
     }
 }
 
@@ -201,9 +213,6 @@ function showConfirmModal(title, message, confirmText = "Confirm") {
     });
 }
 
-/**
- * UPDATED: Creates an invite record AND triggers the Firebase Email Extension
- */
 function setupInviteForm(orgId, adminName) {
     const inviteForm = document.getElementById('invite-form');
     if (!inviteForm) return;
@@ -219,7 +228,6 @@ function setupInviteForm(orgId, adminName) {
         const guestRole = roleInput.value;
 
         try {
-            // 1. Create the Invite document (internal record)
             const inviteRef = await addDoc(collection(db, "invites"), {
                 name: guestName,
                 email: guestEmail,
@@ -230,34 +238,14 @@ function setupInviteForm(orgId, adminName) {
                 createdAt: serverTimestamp()
             });
 
-            // 2. Build the link using the new domain logic
-            // We use window.location.origin to handle local vs production automatically
             const inviteLink = `${window.location.origin}/invite.html?invite=${inviteRef.id}`;
-
-            // 3. TRIGGER THE EXTENSION
-            // We write a doc to the 'mail' collection. The extension listens for this.
-            await addDoc(collection(db, "mail"), {
-                to: guestEmail,
-                message: {
-                    subject: `Join ${adminName} on MergePoint`,
-                    html: `
-                        <div style="font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-                            <h2 style="color: #1e293b; margin-bottom: 16px;">Welcome to MergePoint</h2>
-                            <p style="color: #475569; line-height: 1.6;">
-                                Hello ${guestName},<br><br>
-                                <strong>${adminName}</strong> has invited you to join their team on <strong>MergePoint</strong>.
-                            </p>
-                            <div style="margin: 32px 0; text-align: center;">
-                                <a href="${inviteLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
-                                    Accept Invitation
-                                </a>
-                            </div>
-                            <p style="font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-                                This invitation was sent for the MergePoint workspace. If you weren't expecting this, you can safely ignore this email.
-                            </p>
-                        </div>
-                    `
-                }
+            const sendInviteEmail = httpsCallable(functions, 'sendInviteEmail');
+            
+            await sendInviteEmail({
+                guestEmail,
+                guestName,
+                adminName,
+                inviteLink
             });
 
             alert(`Invitation successfully sent to ${guestEmail}!`);
