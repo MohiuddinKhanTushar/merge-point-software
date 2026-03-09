@@ -57,7 +57,10 @@ export function initSettings() {
             if (pageContent) pageContent.style.display = 'flex';
 
             const orgId = userData.orgId || 'default-org';
+            
+            // Initialize all settings features
             setupReviewToggle(orgId);
+            setupBillingPortal(); // Added Subscription logic
             loadUsers(orgId, user.uid); 
             loadPendingInvites(orgId);
             setupInviteForm(orgId, userData.displayName || user.email); 
@@ -66,6 +69,37 @@ export function initSettings() {
             console.error("Settings Error:", error);
         }
     });
+}
+
+// --- SUBSCRIPTION LOGIC ---
+
+function setupBillingPortal() {
+    const manageBillingBtn = document.getElementById('manage-billing-btn');
+    if (!manageBillingBtn) return;
+
+    manageBillingBtn.onclick = async () => {
+        // UI Feedback
+        const originalText = manageBillingBtn.innerText;
+        manageBillingBtn.disabled = true;
+        manageBillingBtn.innerText = "Connecting to Stripe...";
+
+        try {
+            const createPortalSession = httpsCallable(functions, 'createPortalSession');
+            const result = await createPortalSession();
+            
+            // Redirect user to Stripe Customer Portal
+            if (result.data && result.data.url) {
+                window.location.href = result.data.url;
+            } else {
+                throw new Error("No portal URL returned.");
+            }
+        } catch (error) {
+            console.error("Billing Portal Error:", error);
+            alert("Error: " + error.message);
+            manageBillingBtn.disabled = false;
+            manageBillingBtn.innerText = originalText;
+        }
+    };
 }
 
 // --- USER MANAGEMENT LOGIC ---
@@ -121,7 +155,6 @@ function loadUsers(orgId, currentUserUid) {
     });
 }
 
-// THIS IS THE ONLY VERSION OF removeUser THAT SHOULD EXIST
 async function removeUser(uid) {
     try {
         const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');

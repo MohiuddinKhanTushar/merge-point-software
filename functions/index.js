@@ -14,7 +14,6 @@ const fs = require("fs");
 const PDFParser = require("pdf2json");
 const nodemailer = require("nodemailer"); // Added for invites
 
-
 admin.initializeApp();
 
 // Kept as us-east1 to ensure storage bucket delete sync remains functional
@@ -27,6 +26,8 @@ const getDb = () => getFirestore("default");
 const pineconeApiKey = defineSecret("PINECONE_API_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const brevoSmtpPassword = defineSecret("BREVO_SMTP_PASSWORD"); // Added for invites
+const stripeSecret = defineSecret("STRIPE_SECRET_KEY"); // Added for Stripe
+const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET"); // Added for Stripe
 
 const PINECONE_INDEX = "mergepoint-index";
 
@@ -107,7 +108,7 @@ exports.sendInviteEmail = onCall(
       subject: `Join ${adminName} on MergePoint`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b;">
-            <h2 style="color: #4f46e5; margin-bottom: 16px;">Welcome to MergePoint</h2>
+            <h2 style="color: #4f46e5; margin-bottom: 166px;">Welcome to MergePoint</h2>
             <p style="font-size: 16px; line-height: 1.6;">
                 Hello ${guestName},<br><br>
                 <strong>${adminName}</strong> has invited you to join their team on <strong>MergePoint</strong>.
@@ -272,7 +273,35 @@ exports.generateSectionDraft = onCall(
         .sort((a, b) => b.score - a.score).slice(0, 8);
 
       const contextText = results.map(m => `[Source: ${m.metadata.category}]\n${m.metadata.text}`).join("\n\n");
-      const prompt = `QUESTION: "${question}"\n\nCONTEXT:\n${contextText}\n\nWrite a professional response.`;
+      const prompt = `
+        ROLE: Expert Enterprise Bid Response Writer (UK).
+        TASK: Draft a formal response for a tender section using ONLY the provided supplier knowledge base.
+
+        TENDER REQUIREMENT:
+        "${question}"
+
+        SUPPLIER KNOWLEDGE BASE:
+        ${contextText}
+
+        STRICT EDITORIAL RULES:
+        1. PERSPECTIVE: Adopt the identity of the supplier described in the knowledge base. Use "We", "Our", or the Company Name found in the text. 
+        2. NO META-TALK: Never refer to "the context", "the database", "the provided text", or "the knowledge base".
+        3. TONE: Professional, authoritative, and evidence-based. Avoid "fluff" or generic marketing adjectives.
+        4. FORMATTING: 
+            - Use "•" for bullet points.
+            - Use "1.", "2." for numbered processes.
+            - For sub-headings, use ALL CAPS followed by a line break.
+            - NO Markdown (strictly no asterisks ** or underscores _). 
+        5. ACCURACY: If the knowledge base is silent on a specific requirement, do NOT hallucinate. 
+
+        OUTPUT STRUCTURE:
+        [Directly start with the response content. Do not include introductory phrases like "Here is the response".]
+
+        --- INTERNAL NOTES: MISSING EVIDENCE ---
+        [List only if applicable. Identify specific gaps where the supplier needs to provide more detail to meet enterprise standards. If the information is sufficient, omit this entire section.]
+
+        FINAL REQUIREMENT: The output must be "Submission-Ready" for a formal PDF/Word proposal.
+      `;
       const resultGen = await model.generateContent(prompt);
 
       await getDb().collection("organizations").doc(limits.orgId).update({
@@ -400,3 +429,107 @@ exports.resetMonthlyUsage = onSchedule({
         console.error("Error resetting monthly usage:", error);
     }
 });
+
+/* ------------------ STRIPE CUSTOMER PORTAL ------------------ */
+exports.createPortalSession = onCall(
+  { 
+    region: "us-east1", 
+    secrets: [stripeSecret] 
+  },
+  async (request) => {
+    if (!request.auth) throw new Error("Unauthorized");
+
+    const db = getDb();
+    const userDoc = await db.collection("users").doc(request.auth.uid).get();
+    
+    if (!userDoc.exists) throw new Error("User profile not found");
+
+    const orgId = userDoc.data().orgId;
+    const orgDoc = await db.collection("organizations").doc(orgId).get();
+    const stripeCustomerId = orgDoc.data().stripeCustomerId;
+
+    if (!stripeCustomerId) {
+        throw new Error("No Stripe Customer ID found. This organization might be on a legacy free plan.");
+    }
+
+    const stripeInst = require("stripe")(stripeSecret.value().trim());
+
+    try {
+        const session = await stripeInst.billingPortal.sessions.create({
+          customer: stripeCustomerId,
+          return_url: `https://${request.rawRequest.hostname || "mergepoint-software.com"}/settings.html`, 
+        });
+
+        return { url: session.url };
+    } catch (error) {
+        console.error("Stripe Portal Error:", error);
+        throw new Error("Failed to create billing portal session.");
+    }
+  }
+);
+
+/* ------------------ STRIPE WEBHOOK ------------------ */
+exports.stripeWebhook = onRequest(
+  { secrets: [stripeSecret, stripeWebhookSecret] },
+  async (req, res) => {
+    const stripeInst = require("stripe")(stripeSecret.value().trim());
+    const sig = req.headers["stripe-signature"];
+    const endpointSecret = stripeWebhookSecret.value().trim();
+
+    let event;
+    try {
+      event = stripeInst.webhooks.constructEvent(req.rawBody, sig, endpointSecret);
+    } catch (err) {
+      console.error(`Webhook Signature Error: ${err.message}`);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    const db = getDb();
+
+    // 1. Listen for Successful Checkout
+    if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+        const customerId = session.customer;
+        const sessionId = session.id;
+
+        // Find organization by the temporary session ID
+        const orgQuery = await db.collection("organizations")
+            .where("stripeSessionId", "==", sessionId)
+            .limit(1)
+            .get();
+
+        if (!orgQuery.empty) {
+            await orgQuery.docs[0].ref.update({
+                stripeCustomerId: customerId, // Save the permanent ID for Manage Billing
+                plan: "pro", // Adjust based on your subscription logic
+                status: "active",
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`Successfully linked customer ${customerId} to Org ${orgQuery.docs[0].id}`);
+        }
+    }
+
+    // 2. Listen for Cancelations
+    if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object;
+      const customerId = subscription.customer;
+
+      const orgQuery = await db.collection("organizations")
+        .where("stripeCustomerId", "==", customerId)
+        .limit(1)
+        .get();
+
+      if (!orgQuery.empty) {
+        await orgQuery.docs[0].ref.update({
+          plan: "starter", 
+          status: "canceled",
+          isActive: false,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`Org ${orgQuery.docs[0].id} downgraded via Stripe Webhook.`);
+      }
+    }
+
+    res.json({ received: true });
+  }
+);

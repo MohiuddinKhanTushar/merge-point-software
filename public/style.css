@@ -689,6 +689,48 @@ body {
     cursor: pointer;
 }
 
+/* Premium Export Button Styling */
+.btn-export-premium {
+    background: #059669; /* Emerald 600 - signals success/completion */
+    color: white;
+    border: none;
+    padding: 0.6rem 1.4rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.2), 0 2px 4px -1px rgba(5, 150, 105, 0.1);
+    height: 42px; /* Matches your other header buttons */
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.025em;
+}
+
+.btn-export-premium:hover {
+    background: #047857; /* Darker Emerald */
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(5, 150, 105, 0.3);
+}
+
+.btn-export-premium:active {
+    transform: translateY(0);
+}
+
+/* Add a subtle pulse animation to draw the eye once it appears */
+#download-pdf-btn[style*="display: inline-flex"], 
+#download-pdf-btn[style*="display: flex"] {
+    animation: premiumPulse 2s infinite;
+}
+
+@keyframes premiumPulse {
+    0% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(5, 150, 105, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0); }
+}
+
 /* --- Workspace Sidebar & Sections --- */
 
 /* The outer card that holds the list */

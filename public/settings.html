@@ -99,6 +99,14 @@
                     </label>
                 </div>
 
+                <div class="card" style="margin-bottom: 2rem; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3 style="margin: 0;">Subscription & Billing</h3>
+                        <p style="font-size: 0.85rem; color: #64748b; margin: 4px 0 0 0;">Manage your plan, update payment methods, or cancel your subscription.</p>
+                    </div>
+                    <button id="manage-billing-btn" class="btn-primary" style="padding: 10px 20px;">Manage Billing</button>
+                </div>
+
                 <div class="card" style="margin-bottom: 2rem; padding: 1.5rem;">
                     <h3>Invite Team Member</h3>
                     <form id="invite-form" style="display: flex; gap: 10px; margin-top: 1rem;">
@@ -153,10 +161,8 @@
         import { initSidebar } from './ui-manager.js';
         import { initSettings } from './settings.js';
         
-        // 1. Setup sidebar interaction
         initSidebar();
 
-        // 2. Protect page and update User UI
         checkAuthState((user) => {
             initSettings();
         });
