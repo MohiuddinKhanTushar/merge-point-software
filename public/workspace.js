@@ -219,8 +219,6 @@ async function generateBrandedPDF() {
         let y = pageMargin;
 
         currentBidData.sections.forEach((section, i) => {
-            // New page before every section except if we are at the very start of page 1
-            // (Actually usually better to just keep flow unless title page exists)
             if (i === 0 && titlePageAsset) {
                 doc.addPage();
                 y = pageMargin;
@@ -272,7 +270,6 @@ async function generateBrandedPDF() {
             doc.setFont("helvetica", "italic");
             doc.setFontSize(9);
             doc.setTextColor(150, 150, 150);
-            // Centered at bottom: (PageWidth / 2, PageHeight - 10mm)
             doc.text(
                 `Page ${i} of ${totalPages}`, 
                 pageWidth / 2, 
@@ -356,8 +353,13 @@ async function saveActiveSection() {
         saveBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Saving...`;
     }
     const editorValue = document.getElementById('ai-content-editor')?.value || "";
+    // Capture current displayed confidence from UI
+    const confidenceText = document.getElementById('confidence-level')?.innerText || "0%";
+    const confidenceNum = parseInt(confidenceText.replace('%', '')) || 0;
+
     const updatedSections = [...currentBidData.sections];
     updatedSections[activeSectionIndex].draftAnswer = editorValue;
+    updatedSections[activeSectionIndex].confidence = confidenceNum; // Save the RAG confidence
     updatedSections[activeSectionIndex].status = 'completed';
     updatedSections[activeSectionIndex].managerNotes = ""; 
     try {
@@ -460,8 +462,33 @@ function setupMagicButton(questionText) {
         try {
             const generateDraft = httpsCallable(functions, 'generateSectionDraft');
             const result = await generateDraft({ question: questionText, bidId: bidId, sectionIndex: activeSectionIndex });
-            if (result.data.success && editor) { editor.value = result.data.answer; showToast("Draft generated!"); }
-        } catch (e) { showToast("Drafting failed", "error"); } finally {
+            
+            if (result.data.success && editor) { 
+                let rawAnswer = result.data.answer || "";
+                let confidence = 0;
+
+                // Check if the response contains the "XXCONFIDENCE_NUMBER" pattern
+                const confidenceMatch = rawAnswer.match(/^(\d+)CONFIDENCE_NUMBER/);
+                
+                if (confidenceMatch) {
+                    // Extract the number (e.g., 95)
+                    confidence = parseInt(confidenceMatch[1]);
+                    // Strip the "95CONFIDENCE_NUMBER" and any leading newlines from the editor text
+                    editor.value = rawAnswer.replace(/^(\d+)CONFIDENCE_NUMBER\s*/, "").trim();
+                } else {
+                    // Fallback if the pattern is missing
+                    editor.value = rawAnswer;
+                    confidence = result.data.confidence || 0;
+                }
+
+                // Update the metrics display with the extracted confidence
+                updateMetrics(editor.value, confidence);
+                showToast("Draft generated!"); 
+            }
+        } catch (e) { 
+            console.error(e);
+            showToast("Drafting failed", "error"); 
+        } finally {
             newBtn.disabled = false;
             newBtn.innerHTML = `<i data-lucide="wand-2"></i> Generate AI Draft`;
             if (window.lucide) lucide.createIcons();

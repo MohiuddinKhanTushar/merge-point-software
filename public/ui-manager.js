@@ -1,5 +1,92 @@
 import { db, auth } from './firebase-config.js';
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, orderBy, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, orderBy, addDoc, deleteDoc, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+/**
+ * Injects required CSS for the notification system and mobile restriction
+ */
+function injectNotificationStyles() {
+    if (document.getElementById('noti-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'noti-styles';
+    style.innerHTML = `
+        .noti-action-btn {
+            border: none;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #mark-all-read {
+            background: #eef2ff;
+            color: #4f46e5;
+        }
+        #mark-all-read:hover {
+            background: #e0e7ff;
+            transform: translateY(-1px);
+        }
+        #clear-all-notis {
+            background: #fff1f2;
+            color: #ef4444;
+        }
+        #clear-all-notis:hover {
+            background: #ffe4e6;
+            transform: translateY(-1px);
+        }
+        .noti-item:hover {
+            background-color: #f8fafc !important;
+        }
+        .delete-x-btn {
+            position: absolute;
+            top: 15px;
+            right: 10px;
+            color: #94a3b8;
+            font-size: 18px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+            background: transparent;
+        }
+        .delete-x-btn:hover {
+            background: #fee2e2;
+            color: #ef4444;
+            transform: scale(1.1);
+        }
+
+        /* Mobile Restriction Styles */
+        #mobile-restriction-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #ffffff;
+            z-index: 100000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        @media (max-width: 1024px) {
+            #mobile-restriction-overlay {
+                display: flex;
+            }
+            body > *:not(#mobile-restriction-overlay) {
+                display: none !important;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 /**
  * Initializes the sidebar and notifications
@@ -8,6 +95,8 @@ export function initSidebar() {
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebar-toggle');
     
+    injectNotificationStyles(); // Style injection must happen before overlay creation
+    handleMobileRestriction();
     setupNotifications();
     initGlobalModals();
 
@@ -167,20 +256,36 @@ function setupNotifications() {
                 <div class="noti-wrapper" style="position: relative; margin: 0 15px; cursor: pointer; display: flex; align-items: center;">
                     <i data-lucide="bell" id="notification-bell" style="color: #64748b;"></i>
                     <span id="noti-badge" style="display:none; position: absolute; top: -8px; right: -8px; color: #ef4444; font-size: 11px; font-weight: bold; align-items: center; justify-content: center;">0</span>
-                    <div id="noti-dropdown" style="display:none; position: absolute; top: 40px; right: 0; width: 320px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 9999; max-height: 450px; overflow-y: auto;">
-                        <div style="padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
-                            <span>Notifications</span>
+                    <div id="noti-dropdown" style="display:none; position: absolute; top: 45px; right: 0; width: 340px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); z-index: 9999; max-height: 500px; overflow: hidden; flex-direction: column;">
+                        <div style="padding: 16px; font-weight: 700; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                            <span style="color: #1e293b; font-size: 14px;">Notifications</span>
+                            <div style="display: flex; gap: 8px;">
+                                <button id="mark-all-read" class="noti-action-btn">Mark all read</button>
+                                <button id="clear-all-notis" class="noti-action-btn">Clear all</button>
+                            </div>
                         </div>
-                        <div id="noti-list">
+                        <div id="noti-list" style="overflow-y: auto; flex: 1;">
                             <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 14px;">No new notifications</div>
                         </div>
                     </div>
                 </div>`;
             navRight.insertAdjacentHTML('afterbegin', bellHtml);
+            
+            document.getElementById('clear-all-notis').onclick = (e) => {
+                e.stopPropagation();
+                handleBulkAction(user.uid, user.email, 'delete');
+            };
+
+            document.getElementById('mark-all-read').onclick = (e) => {
+                e.stopPropagation();
+                handleBulkAction(user.uid, user.email, 'read');
+            };
+
             if (window.lucide) lucide.createIcons();
         }
         const q = query(collection(db, "notifications"), where("recipientEmail", "==", user.email), orderBy("createdAt", "desc"));
         const q2 = query(collection(db, "notifications"), where("recipientId", "==", user.uid), orderBy("createdAt", "desc"));
+        
         onSnapshot(q, (snap) => renderNotis(snap));
         onSnapshot(q2, (snap) => renderNotis(snap));
     });
@@ -202,15 +307,61 @@ function renderNotis(snapshot) {
         badge.style.display = unreadCount > 0 ? 'flex' : 'none';
     }
     if (items.length === 0) {
-        list.innerHTML = `<div style="padding: 20px; text-align: center; color: #94a3b8;">All caught up!</div>`;
+        list.innerHTML = `<div style="padding: 30px; text-align: center; color: #94a3b8; font-size: 13px;">All caught up!</div>`;
         return;
     }
+
     list.innerHTML = items.map(n => `
         <div class="noti-item" onclick="handleNotiClick('${n.id}', '${n.bidId}', '${n.type}')" 
-             style="padding: 15px; border-bottom: 1px solid #f1f5f9; font-size: 13px; transition: background 0.2s; background: ${n.read ? 'white' : '#f0f7ff'}; cursor: pointer;">
-            <div style="font-weight: ${n.read ? '400' : '600'}; color: #1e293b; margin-bottom: 4px;">${n.message}</div>
-            <div style="font-size: 11px; color: #94a3b8;">${n.createdAt?.toDate().toLocaleString() || 'Just now'}</div>
+             style="position: relative; padding: 16px; border-bottom: 1px solid #f1f5f9; font-size: 13px; transition: background 0.2s; background: ${n.read ? 'white' : '#f0f7ff'}; cursor: pointer;">
+            <div style="font-weight: ${n.read ? '400' : '600'}; color: #1e293b; margin-bottom: 6px; padding-right: 30px; line-height: 1.4;">${n.message}</div>
+            <div style="font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 4px;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${n.read ? '#cbd5e1' : '#4f46e5'};"></span>
+                ${n.createdAt?.toDate().toLocaleString() || 'Just now'}
+            </div>
+            <div onclick="handleDeleteNoti(event, '${n.id}')" class="delete-x-btn">&times;</div>
         </div>`).join('');
+}
+
+window.handleDeleteNoti = async (event, notiId) => {
+    event.stopPropagation();
+    try {
+        await deleteDoc(doc(db, "notifications", notiId));
+    } catch (e) {
+        console.error("Error deleting notification:", e);
+    }
+};
+
+async function handleBulkAction(uid, email, actionType) {
+    if (actionType === 'delete') {
+        const confirmed = await showConfirm("Clear All Notifications", "This will permanently remove all notifications from your list. Continue?", "Clear All");
+        if (!confirmed) return;
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const q1 = query(collection(db, "notifications"), where("recipientEmail", "==", email));
+        const q2 = query(collection(db, "notifications"), where("recipientId", "==", uid));
+
+        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        
+        const processSnap = (snap) => {
+            snap.forEach(document => {
+                if (actionType === 'delete') {
+                    batch.delete(document.ref);
+                } else if (actionType === 'read' && !document.data().read) {
+                    batch.update(document.ref, { read: true });
+                }
+            });
+        };
+
+        processSnap(snap1);
+        processSnap(snap2);
+
+        await batch.commit();
+    } catch (e) {
+        console.error(`Error during ${actionType} all notifications:`, e);
+    }
 }
 
 window.handleNotiClick = async (notiId, bidId, type) => {
@@ -224,9 +375,45 @@ document.addEventListener('click', (e) => {
     const dropdown = document.getElementById('noti-dropdown');
     const bell = document.getElementById('notification-bell');
     if (!dropdown || !bell) return;
-    if (e.target.id === 'notification-bell' || bell.contains(e.target)) {
-        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-    } else if (!dropdown.contains(e.target)) {
+    
+    // Check if the click was on the bell or the dropdown
+    const isBellClick = e.target.id === 'notification-bell' || bell.contains(e.target);
+    const isInsideDropdown = dropdown.contains(e.target);
+
+    if (isBellClick) {
+        // Toggle between none and flex
+        const isHidden = window.getComputedStyle(dropdown).display === 'none';
+        dropdown.style.display = isHidden ? 'flex' : 'none';
+    } else if (!isInsideDropdown) {
+        // Close if clicking outside
         dropdown.style.display = 'none';
     }
 });
+
+function handleMobileRestriction() {
+    if (document.getElementById('mobile-restriction-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mobile-restriction-overlay';
+    
+
+    overlay.innerHTML = `
+        <div style="max-width: 320px; width: 100%; margin: 0 auto; text-align: center;">
+            <div style="background: #eff6ff; width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                <i data-lucide="monitor" style="color: #3b82f6; width: 32px; height: 32px;"></i>
+            </div>
+            <h2 style="color: #1e293b; font-size: 1.5rem; margin-bottom: 1rem; font-weight: 700; line-height: 1.2;">
+                Desktop Version Required
+            </h2>
+            <p style="color: #64748b; line-height: 1.6; margin-bottom: 2rem; font-size: 0.95rem;">
+                This workspace is optimized for professional use on large screens. Please switch to a PC or Mac browser to continue.
+            </p>
+            <div style="font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 1.5rem;">
+                Mobile support is currently in development.
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    
+    if (window.lucide) window.lucide.createIcons();
+}

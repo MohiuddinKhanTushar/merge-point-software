@@ -35,7 +35,10 @@
                 </div>
 
                 <div class="input-group">
-                    <label for="password">Password</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label for="password">Password</label>
+                        <a href="#" id="forgot-password-link" style="font-size: 0.75rem; color: #2563eb; text-decoration: none; font-weight: 500;">Forgot Password?</a>
+                    </div>
                     <div class="input-wrapper">
                         <i data-lucide="lock"></i>
                         <input type="password" id="password" required placeholder="••••••••">
@@ -46,22 +49,6 @@
                     Sign In <i data-lucide="log-in"></i>
                 </button>
             </form>
-
-            <div class="auth-divider" style="text-align: center; margin: 20px 0; color: #94a3b8; font-size: 0.8rem; position: relative;">
-                <span style="background: #fff; padding: 0 10px; position: relative; z-index: 1;">OR</span>
-                <div style="position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid #e2e8f0;"></div>
-            </div>
-
-            <div class="sso-buttons" style="display: flex; flex-direction: column; gap: 10px;">
-                <button id="google-login" class="btn-sso" style="display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; cursor: pointer; font-weight: 500;">
-                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/google/google-original.svg" alt="Google" style="width: 18px;">
-                    Continue with Google
-                </button>
-                <button id="microsoft-login" class="btn-sso" style="display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; cursor: pointer; font-weight: 500;">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" alt="Microsoft" style="width: 18px;">
-                    Continue with Microsoft
-                </button>
-            </div>
 
             <div class="auth-footer">
                 <p>New to MergePoint? <a href="mailto:support@mergepoint-software.com">Contact Admin for access</a></p>
@@ -78,30 +65,66 @@
     </main>
 
     <script type="module">
-        import { loginUser, loginWithGoogle, loginWithMicrosoft } from './auth.js';
+        import { loginUser, resetPassword } from './auth.js';
+        import { showAlert } from './ui-manager.js';
 
         const loginForm = document.getElementById('login-form');
+        const forgotLink = document.getElementById('forgot-password-link');
+
+        // Handle Login
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
 
+            const submitBtn = loginForm.querySelector('button');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = 'Signing In...';
+
             try {
                 await loginUser(email, password);
             } catch (error) {
                 console.error(error);
-                alert("Invalid credentials. Please try again.");
+                // Custom Modal replacement for login error
+                showAlert("Login Failed", "Invalid credentials. Please check your email and password.");
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
             }
         });
 
-        document.getElementById('google-login').addEventListener('click', async () => {
-            try { await loginWithGoogle(); } catch (error) { alert("Google Login Error"); }
-        });
+        // Handle Password Reset
+        forgotLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
 
-        document.getElementById('microsoft-login').addEventListener('click', async () => {
-            try { await loginWithMicrosoft(); } catch (error) { alert("Microsoft Login Error"); }
+            if (!email) {
+                // Custom Modal replacement for missing email
+                showAlert("Email Required", "Please enter your work email address in the field above first.");
+                return;
+            }
+
+            const originalLinkText = forgotLink.innerText;
+            forgotLink.innerText = "Sending...";
+            forgotLink.style.pointerEvents = "none";
+
+            try {
+                await resetPassword(email);
+                // Custom Modal replacement for success
+                showAlert("Email Sent", "A password reset link has been sent to your inbox.");
+            } catch (error) {
+                console.error(error);
+                showAlert("Error", "Could not send reset email: " + error.message);
+            } finally {
+                forgotLink.innerText = originalLinkText;
+                forgotLink.style.pointerEvents = "auto";
+            }
         });
     </script>
-    <script>lucide.createIcons();</script>
+    <script>
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    </script>
 </body>
 </html>

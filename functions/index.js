@@ -272,7 +272,13 @@ exports.generateSectionDraft = onCall(
         .flatMap(r => r.matches || [])
         .sort((a, b) => b.score - a.score).slice(0, 8);
 
+      // Calculate retrieval score (averaging top vector matches)
+      const avgVectorScore = results.length > 0 
+        ? (results.reduce((acc, curr) => acc + curr.score, 0) / results.length) 
+        : 0;
+
       const contextText = results.map(m => `[Source: ${m.metadata.category}]\n${m.metadata.text}`).join("\n\n");
+      
       const prompt = `
         ROLE: Expert Enterprise Bid Response Writer (UK).
         TASK: Draft a formal response for a tender section using ONLY the provided supplier knowledge base.
@@ -284,31 +290,40 @@ exports.generateSectionDraft = onCall(
         ${contextText}
 
         STRICT EDITORIAL RULES:
-        1. PERSPECTIVE: Adopt the identity of the supplier described in the knowledge base. Use "We", "Our", or the Company Name found in the text. 
-        2. NO META-TALK: Never refer to "the context", "the database", "the provided text", or "the knowledge base".
-        3. TONE: Professional, authoritative, and evidence-based. Avoid "fluff" or generic marketing adjectives.
-        4. FORMATTING: 
-            - Use "•" for bullet points.
-            - Use "1.", "2." for numbered processes.
-            - For sub-headings, use ALL CAPS followed by a line break.
-            - NO Markdown (strictly no asterisks ** or underscores _). 
-        5. ACCURACY: If the knowledge base is silent on a specific requirement, do NOT hallucinate. 
-
-        OUTPUT STRUCTURE:
-        [Directly start with the response content. Do not include introductory phrases like "Here is the response".]
-
-        --- INTERNAL NOTES: MISSING EVIDENCE ---
-        [List only if applicable. Identify specific gaps where the supplier needs to provide more detail to meet enterprise standards. If the information is sufficient, omit this entire section.]
-
-        FINAL REQUIREMENT: The output must be "Submission-Ready" for a formal PDF/Word proposal.
+        1. PERSPECTIVE: Adopt the identity of the supplier. Use "We" or "Our". 
+        2. NO META-TALK: Never refer to "the context" or "the database".
+        3. FORMATTING: Use "•" for bullets. NO Markdown (no asterisks ** or underscores _).
+        
+        CONFIDENCE RATING:
+        Assess how well the knowledge base answers the requirement (0-100).
+        
+        OUTPUT FORMAT:
+        <score>CONFIDENCE_NUMBER</score>
+        <answer>RESPONSE_TEXT</answer>
       `;
+
       const resultGen = await model.generateContent(prompt);
+      const output = resultGen.response.text();
+
+      // Extract Score and Answer
+      const scoreMatch = output.match(/<score>(.*?)<\/score>/);
+      const answerMatch = output.match(/<answer>([\s\S]*?)<\/answer>/);
+
+      const aiConfidence = scoreMatch ? parseInt(scoreMatch[1]) : 70;
+      const finalAnswer = answerMatch ? answerMatch[1].trim() : output;
+
+      // Blend Vector Score (20%) and AI logic assessment (80%)
+      const finalConfidence = Math.round((aiConfidence * 0.8) + ((avgVectorScore * 100) * 0.2));
 
       await getDb().collection("organizations").doc(limits.orgId).update({
           "usageMonth.drafts": admin.firestore.FieldValue.increment(1)
       });
 
-      return { success: true, answer: resultGen.response.text() };
+      return { 
+        success: true, 
+        answer: finalAnswer, 
+        confidence: Math.min(finalConfidence, 100) 
+      };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -437,33 +452,47 @@ exports.createPortalSession = onCall(
     secrets: [stripeSecret] 
   },
   async (request) => {
-    if (!request.auth) throw new Error("Unauthorized");
+    // 1. Authentication Check
+    if (!request.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
 
     const db = getDb();
     const userDoc = await db.collection("users").doc(request.auth.uid).get();
     
-    if (!userDoc.exists) throw new Error("User profile not found");
+    if (!userDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'User profile not found.');
+    }
 
-    const orgId = userDoc.data().orgId;
+    // 2. Organization & Stripe ID Check
+    const userData = userDoc.data();
+    const orgId = userData.orgId;
+    
+    if (!orgId) {
+        throw new functions.https.HttpsError('failed-precondition', 'User is not associated with an organization.');
+    }
+
     const orgDoc = await db.collection("organizations").doc(orgId).get();
     const stripeCustomerId = orgDoc.data().stripeCustomerId;
 
     if (!stripeCustomerId) {
-        throw new Error("No Stripe Customer ID found. This organization might be on a legacy free plan.");
+        throw new functions.https.HttpsError('failed-precondition', 'No Stripe Customer ID found for this organization.');
     }
 
     const stripeInst = require("stripe")(stripeSecret.value().trim());
 
     try {
+        // 3. Create Portal Session with correct Return URL
         const session = await stripeInst.billingPortal.sessions.create({
           customer: stripeCustomerId,
-          return_url: `https://${request.rawRequest.hostname || "mergepoint-software.com"}/settings.html`, 
+          // FIXED: Hardcoded to your actual app URL to avoid the Cloud Functions subdomain error
+          return_url: 'https://app.mergepoint-software.com/index.html', 
         });
 
         return { url: session.url };
     } catch (error) {
         console.error("Stripe Portal Error:", error);
-        throw new Error("Failed to create billing portal session.");
+        throw new functions.https.HttpsError('internal', 'Failed to create billing portal session.');
     }
   }
 );
@@ -492,7 +521,6 @@ exports.stripeWebhook = onRequest(
         const customerId = session.customer;
         const sessionId = session.id;
 
-        // Find organization by the temporary session ID
         const orgQuery = await db.collection("organizations")
             .where("stripeSessionId", "==", sessionId)
             .limit(1)
@@ -500,16 +528,39 @@ exports.stripeWebhook = onRequest(
 
         if (!orgQuery.empty) {
             await orgQuery.docs[0].ref.update({
-                stripeCustomerId: customerId, // Save the permanent ID for Manage Billing
-                plan: "pro", // Adjust based on your subscription logic
+                stripeCustomerId: customerId,
+                plan: "pro", 
                 status: "active",
+                isActive: true, // Grants access
+                cancelAtPeriodEnd: false,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
             console.log(`Successfully linked customer ${customerId} to Org ${orgQuery.docs[0].id}`);
         }
     }
 
-    // 2. Listen for Cancelations
+    // 2. Listen for Subscription Updates (e.g., clicking Cancel in portal)
+    if (event.type === "customer.subscription.updated") {
+      const subscription = event.data.object;
+      const customerId = subscription.customer;
+
+      const orgQuery = await db.collection("organizations")
+        .where("stripeCustomerId", "==", customerId)
+        .limit(1)
+        .get();
+
+      if (!orgQuery.empty) {
+        await orgQuery.docs[0].ref.update({
+          // If true, user has canceled but still has access until period end
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          status: subscription.status,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`Updated sub for Org ${orgQuery.docs[0].id}: cancelAtPeriodEnd=${subscription.cancel_at_period_end}`);
+      }
+    }
+
+    // 3. Listen for Final Deletions (The Hard Cutoff)
     if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object;
       const customerId = subscription.customer;
@@ -523,10 +574,11 @@ exports.stripeWebhook = onRequest(
         await orgQuery.docs[0].ref.update({
           plan: "starter", 
           status: "canceled",
-          isActive: false,
+          isActive: false, // Revokes access via Security Rules
+          cancelAtPeriodEnd: false,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
-        console.log(`Org ${orgQuery.docs[0].id} downgraded via Stripe Webhook.`);
+        console.log(`Org ${orgQuery.docs[0].id} access REVOKED via Stripe Webhook.`);
       }
     }
 

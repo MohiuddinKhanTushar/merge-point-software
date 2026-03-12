@@ -5,7 +5,8 @@ import {
     onAuthStateChanged,
     GoogleAuthProvider,
     OAuthProvider,
-    signInWithPopup 
+    signInWithPopup,
+    sendPasswordResetEmail // Added for forgot password functionality
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { 
     doc, 
@@ -47,7 +48,6 @@ function updateSidebarUI(user, profile) {
     const role = profile?.role || "Member";
     const initial = fullName.charAt(0).toUpperCase();
 
-    // Persist to localStorage to prevent "flicker" on next page load
     localStorage.setItem('userDisplayName', fullName);
     localStorage.setItem('userInitial', initial);
     localStorage.setItem('userRole', role);
@@ -57,23 +57,32 @@ function updateSidebarUI(user, profile) {
     
     if (avatarEl) {
         avatarEl.textContent = initial;
-        // Visual cue: Admins get a distinct color
         if (role === 'admin') {
-            avatarEl.style.background = '#ef4444'; // Red for Admin
+            avatarEl.style.background = '#ef4444';
         } else if (role === 'manager') {
-            avatarEl.style.background = '#f59e0b'; // Amber for Manager
+            avatarEl.style.background = '#f59e0b';
         } else {
-            avatarEl.style.background = '#2563eb'; // Blue for Standard
+            avatarEl.style.background = '#2563eb';
         }
     }
 }
 
-// --- 3. LOGIN LOGIC ---
+// --- 3. LOGIN & RESET LOGIC ---
 export async function loginUser(email, password) {
     try {
         const result = await signInWithEmailAndPassword(auth, email, password);
         await syncUserProfile(result.user);
         window.location.href = 'index.html';
+    } catch (error) {
+        throw error;
+    }
+}
+
+// New Reset Password Function
+export async function resetPassword(email) {
+    try {
+        await sendPasswordResetEmail(auth, email);
+        return true;
     } catch (error) {
         throw error;
     }
@@ -104,7 +113,6 @@ export async function loginWithMicrosoft() {
 // --- 4. LOGOUT LOGIC ---
 export async function logoutUser() {
     try {
-        // CLEAN UP ALL STORAGE
         localStorage.removeItem('sidebar-collapsed');
         localStorage.removeItem('userDisplayName');
         localStorage.removeItem('userInitial');
@@ -121,11 +129,9 @@ export async function logoutUser() {
 export function checkAuthState(callback) {
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            // 1. Fetch the latest profile data
             const userRef = doc(db, "users", user.uid);
             const userSnap = await getDoc(userRef);
             
-            // 2. CRITICAL CHECK: If document is gone, the user was removed by an admin
             if (!userSnap.exists()) {
                 console.warn("User profile not found in Firestore. Revoking session...");
                 await logoutUser();
@@ -133,11 +139,8 @@ export function checkAuthState(callback) {
             }
 
             const profile = userSnap.data();
-
-            // 3. Update the Global Sidebar UI & update localStorage
             updateSidebarUI(user, profile);
 
-            // 4. GLOBAL LOGOUT ATTACHMENT
             const logoutBtn = document.getElementById('logout-btn');
             if (logoutBtn) {
                 logoutBtn.onclick = async (e) => {
@@ -148,13 +151,11 @@ export function checkAuthState(callback) {
 
             callback({ ...user, profile });
         } else {
-            // Clear storage if no user is found
             localStorage.removeItem('userDisplayName');
             localStorage.removeItem('userInitial');
             localStorage.removeItem('userRole');
 
             const path = window.location.pathname;
-            // Allow access to login, signup, and the invite page without being logged in
             if (!path.includes('login.html') && !path.includes('signup.html') && !path.includes('invite.html')) {
                 window.location.href = 'login.html';
             }
