@@ -136,29 +136,52 @@ exports.analyzeTenderDocument = onCall(
     if (!request.auth) throw new HttpsError("unauthenticated", "Unauthorized");
     const { bidId, fileName } = request.data;
     const userId = request.auth.uid;
+    
     try {
       const limits = await getOrgLimits(userId);
-      if (limits.currentDraftCount >= limits.maxDrafts) throw new Error("Limit reached.");
       const bucket = admin.storage().bucket();
       const storagePath = `tenders/${userId}/${fileName}`;
       const tempFilePath = path.join("/tmp", `tender_${Date.now()}.pdf`);
+      
       await bucket.file(storagePath).download({ destination: tempFilePath });
+
       const pdfParser = new PDFParser(null, 1);
       const tenderText = await new Promise((resolve, reject) => {
         pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
         pdfParser.on("pdfParser_dataError", reject);
         pdfParser.parseBuffer(fs.readFileSync(tempFilePath));
       });
+
       const genAI = new GoogleGenerativeAI(geminiApiKey.value().trim());
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const prompt = `Analyze this tender... Return JSON array: TEXT: ${tenderText.substring(0, 40000)}`;
+
+      // FIX: Stronger prompt to ensure the keys "sectionTitle" and "question" match what workspace.js expects
+      const prompt = `Analyze this tender document. Output a JSON array of objects. 
+      Each object must have "sectionTitle" and "question" keys.
+      TEXT: ${tenderText.substring(0, 45000)}`;
+
       const result = await model.generateContent(prompt);
-      const sections = JSON.parse(result.response.text().match(/\[[\s\S]*\]/)[0]);
-      await getDb().collection("bids").doc(bidId).update({ sections: sections, status: "scoping" });
-      await getDb().collection("organizations").doc(limits.orgId).update({ "usageMonth.drafts": admin.firestore.FieldValue.increment(1) });
+      const output = result.response.text();
+
+      // FIX: Better extraction in case Gemini adds ```json blocks
+      const jsonRegex = /\[[\s\S]*\]/;
+      const match = output.match(jsonRegex);
+      
+      if (!match) throw new Error("AI did not return a valid JSON list of sections.");
+      
+      const sections = JSON.parse(match[0]);
+
+      // Update Firestore
+      await getDb().collection("bids").doc(bidId).update({ 
+        sections: sections, 
+        status: "scoping" 
+      });
+
       if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
       return { success: true };
+      
     } catch (error) {
+      console.error("Analysis Error:", error);
       return { success: false, error: error.message };
     }
   }
@@ -185,11 +208,51 @@ exports.generateSectionDraft = onCall(
       const queries = snap.docs.map(doc => index.namespace(getNamespaceForDoc(userId, doc.id)).query({ vector: embedResult.embedding.values, topK: 5, includeMetadata: true }));
       const resultsList = await Promise.all(queries);
       const results = resultsList.flatMap(r => r.matches || []).sort((a, b) => b.score - a.score).slice(0, 8);
-      const contextText = results.map(m => `[Source: ${m.metadata.category}]\n${m.metadata.text}`).join("\n\n");
-      const resultGen = await model.generateContent(`Draft response for: ${question} Context: ${contextText}`);
+      
+      // Setup Context Text for the prompt
+      const contextText = results.map(m => `[Source: ${m.metadata.category}]\n${m.metadata.text}`).join("\n\n---\n\n");
+
+      // Updated Expert Enterprise Prompt
+      const prompt = `
+        ROLE: Expert Enterprise Bid Response Writer (UK).
+        TASK: Draft a formal response for a tender section using ONLY the provided supplier knowledge base.
+
+        TENDER REQUIREMENT:
+        "${question}"
+
+        SUPPLIER KNOWLEDGE BASE:
+        ${contextText}
+
+        STRICT EDITORIAL RULES:
+        1. PERSPECTIVE: Adopt the identity of the supplier described in the knowledge base. Use "We", "Our", or the Company Name found in the text. 
+        2. NO META-TALK: Never refer to "the context", "the database", "the provided text", or "the knowledge base".
+        3. TONE: Professional, authoritative, and evidence-based. Avoid "fluff" or generic marketing adjectives.
+        4. FORMATTING: 
+            - Use "•" for bullet points.
+            - Use "1.", "2." for numbered processes.
+            - For sub-headings, use ALL CAPS followed by a line break.
+            - NO Markdown (strictly no asterisks ** or underscores _). 
+        5. ACCURACY: If the knowledge base is silent on a specific requirement, do NOT hallucinate. 
+
+        OUTPUT STRUCTURE:
+        [Directly start with the response content. Do not include introductory phrases like "Here is the response".]
+
+        --- INTERNAL NOTES: MISSING EVIDENCE ---
+        [List only if applicable. Identify specific gaps where the supplier needs to provide more detail to meet enterprise standards. If the information is sufficient, omit this entire section.]
+
+        FINAL REQUIREMENT: The output must be "Submission-Ready" for a formal PDF/Word proposal.
+      `;
+
+      const resultGen = await model.generateContent(prompt);
       await db.collection("organizations").doc(limits.orgId).update({ "usageMonth.drafts": admin.firestore.FieldValue.increment(1) });
-      return { success: true, answer: resultGen.response.text(), confidence: 85 };
+      
+      return { 
+        success: true, 
+        answer: resultGen.response.text(), 
+        confidence: results.length > 0 ? Math.round(results[0].score * 100) : 50 
+      };
     } catch (error) {
+      console.error("Draft Generation Error:", error);
       return { success: false, error: error.message };
     }
   }
@@ -312,7 +375,7 @@ exports.createPortalSession = onCall(
     try {
         const session = await stripeInst.billingPortal.sessions.create({
           customer: stripeCustomerId,
-          return_url: 'https://app.mergepoint-software.com/index.html', 
+          return_url: '[https://app.mergepoint-software.com/index.html](https://app.mergepoint-software.com/index.html)', 
         });
         return { url: session.url };
     } catch (error) {

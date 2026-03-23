@@ -1,35 +1,36 @@
 import { initSidebar } from './ui-manager.js';
 import { db, auth, app } from './firebase-config.js';
-import { checkAuthState } from './auth.js'; 
-import { doc, onSnapshot, updateDoc, collection, getDocs, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { checkAuthState } from './auth.js';
+import { doc, onSnapshot, updateDoc, collection, getDocs, addDoc, query, where, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
 initSidebar();
 
 const urlParams = new URLSearchParams(window.location.search);
 const bidId = urlParams.get('id');
-const functions = getFunctions(app, "us-east1"); 
+const functions = getFunctions(app, "us-east1");
 
 let activeSectionIndex = null;
 let currentBidData = null;
 
-checkAuthState((user) => {
+checkAuthState(async (user) => {
     if (user && bidId) {
+        // 1. Listen to the Bid Document
         const docRef = doc(db, "bids", bidId);
         onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 currentBidData = data;
-                
+
                 const titleEl = document.getElementById('bid-title');
                 if (titleEl) titleEl.innerText = data.bidName || "Untitled Project";
-                
+
                 const statusEl = document.getElementById('bid-status');
                 if (statusEl) statusEl.innerText = (data.status || "DRAFTING").toUpperCase();
-                
+
                 const clientEl = document.getElementById('client-name');
                 if (clientEl) clientEl.innerHTML = `<strong>Client:</strong> ${data.client || "Not Specified"}`;
-                
+
                 const deadlineEl = document.getElementById('bid-deadline');
                 if (deadlineEl && data.deadline) {
                     deadlineEl.innerHTML = `<strong>Due:</strong> ${data.deadline.toDate().toLocaleDateString()}`;
@@ -55,7 +56,11 @@ checkAuthState((user) => {
             }
         });
 
-        loadReviewerDropdown();
+        // 2. Listen to Organization Settings to toggle Review Button
+        setupOrgSettingsListener(user);
+
+        // Load the filtered dropdown
+        loadReviewerDropdown(user);
 
         // Save Button logic
         const saveBtn = document.getElementById('save-bid-btn');
@@ -66,25 +71,17 @@ checkAuthState((user) => {
         if (reAnalyzeBtn) {
             reAnalyzeBtn.onclick = async () => {
                 if (!currentBidData?.fileName) return showToast("No file found to analyze", "error");
-                
                 reAnalyzeBtn.disabled = true;
                 reAnalyzeBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Analyzing...`;
                 if (window.lucide) lucide.createIcons();
-
                 try {
                     const analyzeDoc = httpsCallable(functions, 'analyzeTenderDocument');
-                    const result = await analyzeDoc({ 
-                        bidId: bidId, 
-                        fileName: currentBidData.fileName 
+                    const result = await analyzeDoc({
+                        bidId: bidId,
+                        fileName: currentBidData.fileName
                     });
-
-                    if (result.data.success) {
-                        showToast("Tender re-analyzed successfully!");
-                    } else {
-                        throw new Error(result.data.error || "Analysis failed");
-                    }
+                    if (result.data.success) showToast("Tender re-analyzed successfully!");
                 } catch (e) {
-                    console.error("Analysis Error:", e);
                     showToast("Analysis failed: " + e.message, "error");
                 } finally {
                     reAnalyzeBtn.disabled = false;
@@ -96,26 +93,75 @@ checkAuthState((user) => {
     }
 });
 
+/**
+ * Listens to the organization's 'reviewRequired' setting
+ * and updates the workspace UI in real-time.
+ */
+async function setupOrgSettingsListener(user) {
+    try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (!userDoc.exists()) return;
+
+        const orgId = userDoc.data().orgId;
+        if (!orgId) return;
+
+        const orgRef = doc(db, "organizations", orgId);
+        const submitReviewBtn = document.getElementById('submit-review-btn');
+        const publishDirectBtn = document.getElementById('publish-direct-btn');
+
+        onSnapshot(orgRef, (orgSnap) => {
+            if (orgSnap.exists()) {
+                const settings = orgSnap.data();
+                const isReviewRequired = settings.reviewRequired !== false;
+
+                if (submitReviewBtn) {
+                    submitReviewBtn.style.display = isReviewRequired ? 'flex' : 'none';
+                }
+
+                if (publishDirectBtn) {
+                    publishDirectBtn.style.display = isReviewRequired ? 'none' : 'flex';
+                    publishDirectBtn.onclick = async () => {
+                        publishDirectBtn.disabled = true;
+                        try {
+                            await updateDoc(doc(db, "bids", bidId), {
+                                status: "completed",
+                                submittedAt: new Date()
+                            });
+                            showToast("Project completed!");
+                            setTimeout(() => window.location.href = 'index.html', 1500);
+                        } catch (e) {
+                            showToast("Failed to update status", "error");
+                            publishDirectBtn.disabled = false;
+                        }
+                    };
+                }
+            }
+        });
+    } catch (err) {
+        console.error("Error setting up org listener:", err);
+    }
+}
+
 async function generateBrandedPDF() {
     const { jsPDF } = window.jspdf || {};
     if (!jsPDF) return showToast("jsPDF library not initialized. Please refresh.", "error");
 
-    const doc = new jsPDF({
+    const pdfDoc = new jsPDF({
         orientation: 'p',
         unit: 'mm',
         format: 'a4',
         compress: true
     });
 
-    const pageHeight = 297; 
+    const pageHeight = 297;
     const pageWidth = 210;
-    const pageMargin = 25; 
+    const pageMargin = 25;
     const contentWidth = pageWidth - (pageMargin * 2);
 
     const downloadBtn = document.getElementById('download-pdf-btn');
     if (downloadBtn) {
         downloadBtn.disabled = true;
-        downloadBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Rendering Ultra-HD...`;
+        downloadBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Rendering PDF...`;
     }
     if (window.lucide) lucide.createIcons();
 
@@ -136,7 +182,7 @@ async function generateBrandedPDF() {
                 const loadingTask = pdfLib.getDocument({ url: url, cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/cmaps/', cMapPacked: true });
                 const pdf = await loadingTask.promise;
                 const page = await pdf.getPage(1);
-                const viewport = page.getViewport({ scale: 5.0 }); 
+                const viewport = page.getViewport({ scale: 5.0 });
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
                 canvas.height = viewport.height;
@@ -144,11 +190,11 @@ async function generateBrandedPDF() {
                 context.imageSmoothingEnabled = true;
                 context.imageSmoothingQuality = 'high';
                 await page.render({ canvasContext: context, viewport: viewport }).promise;
-                return canvas.toDataURL('image/png'); 
+                return canvas.toDataURL('image/png');
             } else {
                 return new Promise((res, rej) => {
                     const img = new Image();
-                    img.crossOrigin = "anonymous"; 
+                    img.crossOrigin = "anonymous";
                     img.src = url + (url.includes('?') ? '&' : '?') + "t=" + new Date().getTime();
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
@@ -169,7 +215,7 @@ async function generateBrandedPDF() {
         const qAssets = query(collection(db, "knowledge"), where("ownerId", "==", auth.currentUser.uid));
         const snapAssets = await getDocs(qAssets);
         const assets = snapAssets.docs.map(d => d.data());
-        
+
         const qUser = query(collection(db, "users"), where("uid", "==", auth.currentUser.uid));
         const snapUser = await getDocs(qUser);
         let actualName = "Proposal Lead";
@@ -184,101 +230,101 @@ async function generateBrandedPDF() {
         if (titlePageAsset?.fileUrl) {
             try {
                 const imgData = await loadAssetAsImage(titlePageAsset.fileUrl);
-                doc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'NONE');
+                pdfDoc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'NONE');
                 if (titlePageAsset.mapping) {
                     const map = titlePageAsset.mapping;
                     const style = titlePageAsset.fontStyle || { family: 'helvetica', size: 24 };
-                    doc.setTextColor(40, 40, 40);
+                    pdfDoc.setTextColor(40, 40, 40);
                     if (map.tenderName) {
-                        doc.setFont(style.family, "bold");
-                        doc.setFontSize(style.size);
-                        doc.text(currentBidData.bidName || "Project Proposal", map.tenderName.x * pageWidth, map.tenderName.y * pageHeight);
+                        pdfDoc.setFont(style.family, "bold");
+                        pdfDoc.setFontSize(style.size);
+                        pdfDoc.text(currentBidData.bidName || "Project Proposal", map.tenderName.x * pageWidth, map.tenderName.y * pageHeight);
                     }
                     if (map.clientName) {
-                        doc.setFont(style.family, "normal");
-                        doc.setFontSize(Math.max(12, Math.round(style.size * 0.6)));
-                        doc.text(currentBidData.client || "Valued Client", map.clientName.x * pageWidth, map.clientName.y * pageHeight);
+                        pdfDoc.setFont(style.family, "normal");
+                        pdfDoc.setFontSize(Math.max(12, Math.round(style.size * 0.6)));
+                        pdfDoc.text(currentBidData.client || "Valued Client", map.clientName.x * pageWidth, map.clientName.y * pageHeight);
                     }
                     if (map.userName) {
-                        doc.setFont(style.family, "normal");
-                        doc.setFontSize(Math.max(12, Math.round(style.size * 0.5)));
-                        doc.text(actualName, map.userName.x * pageWidth, map.userName.y * pageHeight);
+                        pdfDoc.setFont(style.family, "normal");
+                        pdfDoc.setFontSize(Math.max(12, Math.round(style.size * 0.5)));
+                        pdfDoc.text(actualName, map.userName.x * pageWidth, map.userName.y * pageHeight);
                     }
                     if (map.date) {
-                        doc.setFont(style.family, "normal");
-                        doc.setFontSize(Math.max(10, Math.round(style.size * 0.4)));
+                        pdfDoc.setFont(style.family, "normal");
+                        pdfDoc.setFontSize(Math.max(10, Math.round(style.size * 0.4)));
                         const dateStr = new Date().toLocaleDateString('en-GB');
-                        doc.text(dateStr, map.date.x * pageWidth, map.date.y * pageHeight);
+                        pdfDoc.text(dateStr, map.date.x * pageWidth, map.date.y * pageHeight);
                     }
                 }
             } catch (e) { console.warn("Title page skip", e); }
         }
 
         // 2. RENDER CONTENT SECTIONS
-        doc.setTextColor(0, 0, 0);
+        pdfDoc.setTextColor(0, 0, 0);
         let y = pageMargin;
 
         currentBidData.sections.forEach((section, i) => {
             if (i === 0 && titlePageAsset) {
-                doc.addPage();
+                pdfDoc.addPage();
                 y = pageMargin;
             }
 
             const title = `${i + 1}. ${section.sectionTitle || 'Section'}`;
             const content = section.draftAnswer || section.aiResponse || "No content provided.";
-            
-            doc.setFont("helvetica", "bold"); doc.setFontSize(16);
-            const titleLines = doc.splitTextToSize(title, contentWidth);
+
+            pdfDoc.setFont("helvetica", "bold"); pdfDoc.setFontSize(16);
+            const titleLines = pdfDoc.splitTextToSize(title, contentWidth);
             const titleHeight = titleLines.length * 8;
 
             if (y + titleHeight > (pageHeight - pageMargin)) {
-                doc.addPage();
+                pdfDoc.addPage();
                 y = pageMargin;
             }
-            doc.text(titleLines, pageMargin, y);
+            pdfDoc.text(titleLines, pageMargin, y);
             y += titleHeight + 4;
 
-            doc.setFont("helvetica", "normal"); doc.setFontSize(11);
-            const bodyLines = doc.splitTextToSize(content, contentWidth);
+            pdfDoc.setFont("helvetica", "normal"); pdfDoc.setFontSize(11);
+            const bodyLines = pdfDoc.splitTextToSize(content, contentWidth);
             const lineHeight = 7;
 
             bodyLines.forEach((line) => {
                 if (y + lineHeight > (pageHeight - pageMargin)) {
-                    doc.addPage();
+                    pdfDoc.addPage();
                     y = pageMargin;
                 }
-                doc.text(line, pageMargin, y);
+                pdfDoc.text(line, pageMargin, y);
                 y += lineHeight;
             });
 
-            y += 10; 
+            y += 10;
         });
 
         // 3. RENDER CONTACT PAGE
         if (contactPageAsset?.fileUrl) {
             try {
-                doc.addPage();
+                pdfDoc.addPage();
                 const contactImgData = await loadAssetAsImage(contactPageAsset.fileUrl);
-                doc.addImage(contactImgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'NONE');
+                pdfDoc.addImage(contactImgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'NONE');
             } catch (e) { console.warn("Contact page skip", e); }
         }
 
         // --- ADD PAGE NUMBERS ---
-        const totalPages = doc.internal.getNumberOfPages();
+        const totalPages = pdfDoc.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
-            doc.setPage(i);
-            doc.setFont("helvetica", "italic");
-            doc.setFontSize(9);
-            doc.setTextColor(150, 150, 150);
-            doc.text(
-                `Page ${i} of ${totalPages}`, 
-                pageWidth / 2, 
-                pageHeight - 10, 
+            pdfDoc.setPage(i);
+            pdfDoc.setFont("helvetica", "italic");
+            pdfDoc.setFontSize(9);
+            pdfDoc.setTextColor(150, 150, 150);
+            pdfDoc.text(
+                `Page ${i} of ${totalPages}`,
+                pageWidth / 2,
+                pageHeight - 10,
                 { align: "center" }
             );
         }
 
-        doc.save(`${currentBidData.bidName || 'Bid'}_Final.pdf`);
+        pdfDoc.save(`${currentBidData.bidName || 'Bid'}_Final.pdf`);
         showToast("Final PDF Downloaded!");
 
     } catch (e) {
@@ -319,7 +365,7 @@ function renderSectionsList(sections) {
         let statusText = "EMPTY", statusClass = "status-empty";
         if (section.status === 'flagged') { statusText = "ACTION REQ."; statusClass = "status-flagged"; }
         else if ((section.aiResponse?.trim()) || (section.draftAnswer?.trim())) { statusText = "COMPLETED"; statusClass = "status-ready"; }
-        
+
         item.innerHTML = `
             <div class="section-info">
                 <span class="badge ${statusClass}">${statusText}</span>
@@ -353,15 +399,14 @@ async function saveActiveSection() {
         saveBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Saving...`;
     }
     const editorValue = document.getElementById('ai-content-editor')?.value || "";
-    // Capture current displayed confidence from UI
     const confidenceText = document.getElementById('confidence-level')?.innerText || "0%";
     const confidenceNum = parseInt(confidenceText.replace('%', '')) || 0;
 
     const updatedSections = [...currentBidData.sections];
     updatedSections[activeSectionIndex].draftAnswer = editorValue;
-    updatedSections[activeSectionIndex].confidence = confidenceNum; // Save the RAG confidence
+    updatedSections[activeSectionIndex].confidence = confidenceNum;
     updatedSections[activeSectionIndex].status = 'completed';
-    updatedSections[activeSectionIndex].managerNotes = ""; 
+    updatedSections[activeSectionIndex].managerNotes = "";
     try {
         await updateDoc(doc(db, "bids", bidId), { sections: updatedSections });
         showToast("Changes saved.");
@@ -386,47 +431,86 @@ async function updateGlobalProgress(sections) {
     const bar = document.getElementById('overall-progress-bar');
     const text = document.getElementById('progress-text');
     const submitBtn = document.getElementById('submit-review-btn');
+    const publishBtn = document.getElementById('publish-direct-btn');
+
     if (bar) bar.style.width = `${percentage}%`;
     if (text) text.innerText = `${percentage}% Done`;
-    if (submitBtn) { submitBtn.disabled = percentage < 100; submitBtn.style.opacity = percentage < 100 ? "0.5" : "1"; }
+    
+    [submitBtn, publishBtn].forEach(btn => {
+        if (btn) {
+            btn.disabled = percentage < 100;
+            btn.style.opacity = percentage < 100 ? "0.5" : "1";
+        }
+    });
+
     try { await updateDoc(doc(db, "bids", bidId), { progress: percentage }); } catch (e) {}
 }
 
-async function loadReviewerDropdown() {
+async function loadReviewerDropdown(currentUser) {
     const existingDropdown = document.getElementById('reviewer-select');
     const oldInput = document.getElementById('reviewer-email');
     if (existingDropdown || !oldInput) return;
+
     const select = document.createElement('select');
     select.id = 'reviewer-select';
     select.style.cssText = "width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;";
+
     const defaultOpt = document.createElement('option');
     defaultOpt.text = "Select a Manager/Reviewer...";
+    defaultOpt.value = "";
     select.add(defaultOpt);
+
     try {
-        const querySnapshot = await getDocs(collection(db, "users"));
+        const userDocRef = doc(db, "users", currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (!userDocSnap.exists()) return;
+
+        const myOrgId = userDocSnap.data().orgId;
+        if (!myOrgId) return;
+
+        const q = query(collection(db, "users"), where("orgId", "==", myOrgId));
+        const querySnapshot = await getDocs(q);
+
         querySnapshot.forEach((doc) => {
             const userData = doc.data();
-            const opt = document.createElement('option');
-            opt.value = userData.email;
-            opt.text = `${userData.displayName || 'Team Member'} (${userData.email})`;
-            select.add(opt);
+            const isManager = userData.role === 'manager' || userData.role === 'admin';
+            if (isManager) {
+                const opt = document.createElement('option');
+                opt.value = userData.email;
+                opt.text = `${userData.displayName || 'Team Member'} (${userData.email})`;
+                select.add(opt);
+            }
         });
         oldInput.replaceWith(select);
-    } catch (e) {}
+    } catch (e) { console.error("Error loading reviewers:", e); }
 }
 
 const confirmSubmitBtn = document.getElementById('confirm-submit-btn');
 if (confirmSubmitBtn) {
     confirmSubmitBtn.onclick = async () => {
         const reviewerEmail = document.getElementById('reviewer-select')?.value;
-        if (!reviewerEmail || reviewerEmail.includes("Select")) return alert("Please select a reviewer.");
+        if (!reviewerEmail || reviewerEmail === "") return alert("Please select a reviewer.");
         confirmSubmitBtn.disabled = true;
         try {
-            await updateDoc(doc(db, "bids", bidId), { status: "review", assignedReviewer: reviewerEmail, submittedAt: new Date() });
-            await addDoc(collection(db, "notifications"), { recipientEmail: reviewerEmail, type: "submission", message: `New tender: ${currentBidData.bidName}`, bidId: bidId, read: false, createdAt: new Date() });
+            await updateDoc(doc(db, "bids", bidId), {
+                status: "review",
+                assignedReviewer: reviewerEmail,
+                submittedAt: new Date()
+            });
+            await addDoc(collection(db, "notifications"), {
+                recipientEmail: reviewerEmail,
+                type: "submission",
+                message: `New tender: ${currentBidData.bidName}`,
+                bidId: bidId,
+                read: false,
+                createdAt: new Date()
+            });
             showToast("Submitted!");
             setTimeout(() => window.location.href = 'index.html', 1500);
-        } catch (e) { alert("Failed: " + e.message); confirmSubmitBtn.disabled = false; }
+        } catch (e) {
+            alert("Failed: " + e.message);
+            confirmSubmitBtn.disabled = false;
+        }
     };
 }
 
@@ -462,32 +546,25 @@ function setupMagicButton(questionText) {
         try {
             const generateDraft = httpsCallable(functions, 'generateSectionDraft');
             const result = await generateDraft({ question: questionText, bidId: bidId, sectionIndex: activeSectionIndex });
-            
-            if (result.data.success && editor) { 
+
+            if (result.data.success && editor) {
                 let rawAnswer = result.data.answer || "";
                 let confidence = 0;
-
-                // Check if the response contains the "XXCONFIDENCE_NUMBER" pattern
                 const confidenceMatch = rawAnswer.match(/^(\d+)CONFIDENCE_NUMBER/);
-                
+
                 if (confidenceMatch) {
-                    // Extract the number (e.g., 95)
                     confidence = parseInt(confidenceMatch[1]);
-                    // Strip the "95CONFIDENCE_NUMBER" and any leading newlines from the editor text
                     editor.value = rawAnswer.replace(/^(\d+)CONFIDENCE_NUMBER\s*/, "").trim();
                 } else {
-                    // Fallback if the pattern is missing
                     editor.value = rawAnswer;
                     confidence = result.data.confidence || 0;
                 }
-
-                // Update the metrics display with the extracted confidence
                 updateMetrics(editor.value, confidence);
-                showToast("Draft generated!"); 
+                showToast("Draft generated!");
             }
-        } catch (e) { 
+        } catch (e) {
             console.error(e);
-            showToast("Drafting failed", "error"); 
+            showToast("Drafting failed", "error");
         } finally {
             newBtn.disabled = false;
             newBtn.innerHTML = `<i data-lucide="wand-2"></i> Generate AI Draft`;
