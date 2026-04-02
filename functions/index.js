@@ -375,7 +375,7 @@ exports.createPortalSession = onCall(
     try {
         const session = await stripeInst.billingPortal.sessions.create({
           customer: stripeCustomerId,
-          return_url: '[https://app.mergepoint-software.com/index.html](https://app.mergepoint-software.com/index.html)', 
+          return_url: 'https://app.mergepoint-software.com/index.html', 
         });
         return { url: session.url };
     } catch (error) {
